@@ -1,0 +1,44 @@
+model:
+  name: "model_name"
+  type: "transformer"
+
+  pretrained: null
+  start_from_checkpoint: null
+
+  share_encoder_decoder_embeddings: false
+
+  share_decoder_input_output_embeddings: true
+
+  encoder:
+    pretrained: null
+    tokenizer: "char"
+
+    embedding_dim: 768
+    max_num_embeddings: 512
+    learned_positional_embeddings: false
+    norm_embeddings: true
+    model_dim: 768
+    feedforward_dim: 2048
+    attention_heads: 12
+    dropout: 0.1
+
+    num_layers: 6
+    share_parameters: false
+    activation: "gelu"
+
+  decoder:
+    pretrained: null
+    tokenizer: "char"
+
+    embedding_dim: 768
+    max_num_embeddings: 512
+    learned_positional_embeddings: true
+    norm_embeddings: true
+    model_dim: 768
+    feedforward_dim: 2048
+    attention_heads: 12
+    dropout: 0.1
+
+    num_layers: 6
+    share_parameters: false
+    activation: "gelu"

@@ -1,0 +1,12 @@
+cut_overflowing: false
+data:
+- dummy.jsonl
+lmdb_name: dummy_lmdb
+max_sequence_length: 1024
+max_sequences: null
+output_dir: lmdb
+preprocessing: []
+pretokenize: false
+seed: 22
+target_tokenizer: null
+tokenizer: char

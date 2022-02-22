@@ -1,0 +1,14 @@
+data:
+  - "dummy.jsonl"
+
+output_dir: "lmdb"
+
+tokenizer: "char"
+
+seed: 22
+
+lmdb: true
+lmdb_name: "dummy_lmdb"
+
+max_sequence_length: 1024
+cut_overflowing: false
