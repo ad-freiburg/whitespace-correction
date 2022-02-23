@@ -1,8 +1,5 @@
-import re
 import string
 from typing import List, Tuple
-
-import ftfy
 
 import numpy as np
 
@@ -18,82 +15,14 @@ def clean_sequence(sequence: str) -> str:
     return " ".join(sequence.strip().split())
 
 
-def clean_text(sequence: str) -> str:
-    """
-
-    Fixes quotes and unicode issues using ftfy.
-
-    :param sequence: string
-    :return: cleaned string
-    """
-    return ftfy.fix_text(sequence)
-
-
-def is_valid_sequence(sequence: str, min_length: int = 10) -> bool:
-    """
-
-    Check if a string is a valid sequence in the sense that it is a proper sentence/expression.
-
-    :param sequence: string
-    :param min_length: minimum length of string
-    :return: bool whether string is valid
-    """
-    # from tokenization repair repo
-    f = re.compile(r" [.,;]( |$)|<|>|\"\"|\(\)| ' |\([,;]|colspan")
-    if f.search(sequence) is not None:
-        return False
-    # if sequence is smaller than min_length characters its invalid
-    if len(sequence) < min_length:
-        return False
-    # sequence must contain at least one standard character to be valid
-    contains_chars = re.compile(r"[a-zA-Z]+")
-    if contains_chars.search(sequence) is None:
-        return False
-    # check if sequence contains some xml/html markup
-    contains_markup = re.compile(r"<.*?>|</.*?>")
-    if contains_markup.search(sequence) is not None:
-        return False
-    # if sequence passes all the tests its valid
-    return True
-
-
-_APOSTROPH = {r"\s(['`]\w+)": r"\1",
-              r"\s(n['`]t\s)": r"\1"}
-
-_PUNCTUATION = {r"\s([.,?!;:])": r"\1"}
-
-
-def tokens_to_text(tokens: List[str]) -> str:
-    """
-
-    Bring tokens together to a proper string. Just joining with whitespaces is not enough,
-    e.g. ["I", "have", "n't"] should get "I haven't" and not "I have n't".
-
-    :param tokens: list of tokens
-    :return: proper string
-    """
-    tokens = [token.strip() for token in tokens]
-
-    sequence = " ".join(tokens)
-    sequence = clean_text(sequence)
-
-    for pattern, sub in _APOSTROPH.items():
-        sequence = re.sub(pattern, sub, sequence)
-
-    for pattern, sub in _PUNCTUATION.items():
-        sequence = re.sub(pattern, sub, sequence)
-
-    return clean_sequence(sequence)
-
-
-_INCLUDE_ALL = [i for i in range(4)]
-_EDIT_CHARS = list(string.ascii_letters)
+_INCLUDE_ALL = tuple(i for i in range(4))
+_EDIT_CHARS = tuple(string.ascii_letters)
 
 
 def edit_token(token: str,
                rand: np.random.RandomState,
-               include: List[int] = _INCLUDE_ALL,
-               edit_chars: List[str] = _EDIT_CHARS) -> Tuple[str, List[int]]:
+               include: Tuple[int] = _INCLUDE_ALL,
+               edit_chars: Tuple[str] = _EDIT_CHARS) -> Tuple[str, List[int]]:
     """
 
     Perform a random edit operation from {insert, delete, swap, replace} with the token.

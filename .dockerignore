@@ -1,6 +1,7 @@
 tokenization_repair/data
 tokenization_repair/experiments
 tokenization_repair/third_party
+trt/api/.cache
 .git
 .svn
 __pycache__

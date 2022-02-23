@@ -12,7 +12,7 @@ def zip_experiment(args: argparse.Namespace) -> None:
     if not args.out_file.endswith(".zip"):
         args.out_file += ".zip"
 
-    with zipfile.ZipFile(args.out_file, "w", zipfile.ZIP_DEFLATED) as zip_file:
+    with zipfile.ZipFile(args.out_file, "w") as zip_file:
         checkpoint_best = io.glob_safe(os.path.join(args.experiment, "checkpoints", "*-checkpoint-best.pt"))
         assert len(checkpoint_best) == 1
         checkpoint = io.load_checkpoint(checkpoint_best[0])

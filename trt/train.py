@@ -1,6 +1,5 @@
 import argparse
 import os
-import random
 import re
 import sys
 import time
@@ -10,11 +9,8 @@ from io import StringIO
 from typing import Dict, List, Optional, Tuple
 
 import GPUtil
-
 import numpy as np
-
 import tokenizers
-
 import torch
 from torch import distributed as dist
 from torch import multiprocessing as mp

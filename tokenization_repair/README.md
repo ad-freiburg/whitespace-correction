@@ -1,8 +1,4 @@
-## Masters project - Tokenization repair using Transformers
-*by Sebastian Walter*
-
-> *All the commands on this page should be executed 
-inside the Docker container (for infos about the Docker setup see `README.md` in parent directory)*
+## Tokenization repair using Transformers
 
 ### Training instructions
 
@@ -10,64 +6,87 @@ In general, you will only need the following two commands:
 
 First preprocess some data given a preprocessing configuration file using
 
-`python -m tfnm_text.preprocess_data --config <path_to_config_file>`
+`python -m trt.preprocess_data --config <path_to_config_file>`
 
 After that, train your model given a training configuration file using
 
-`python -m tfnm_text.train --config <path_to_config_file>`
+`python -m trt.train --config <path_to_config_file>`
 
 To check the options and the required format of the preprocessing and training configuration files, 
-see `/masters_project/configs/data_preprocessing/base.yaml` and `/masters_project/configs/train/base.yaml`.
+see [trt/configs/data_preprocessing/base.yaml](../configs/data_preprocessing/base.yaml) and 
+[trt/configs/train/base.yaml](../configs/train/base.yaml).
 
 ### Reproduce results
 
-To reproduce the results of this project (see blog post) 
-read the following sections `Download data`, `Preprocess data` and `Model training`.
-
-> The two sections `Download data` and `Preprocess data` are just here for reference. It
-> is recommended that you skip these two sections and just mount the data from 
-> `/nfs/students/sebastian-walter/data` into the Docker container 
-> under `/masters_project/tokenization_repair/data` (cf. README.md in parent directory 
-> or command at the end of the Dockerfile).
-> This not only saves a lot of time, but also ensures you are training with the exact same data.
+To reproduce the results of this project read the following sections `Download data`, `Preprocess data` and `Model training`.
 
 #### Download data
 
-> *Skip this if you have already setup the data and/or mounted it into the 
-Docker container*
+For our training data we used sequences from Wikipedia and Arxiv. We then created two versions of our training dataset, 
+one with spelling and OCR errors and one without.
 
-Download the Wikipedia and Bookcorpus datasets using
+To download the dataset without spelling and OCR errors execute the following commands:
+```bash
+# download raw text data as tar file and save it under data/raw
+wget -P data/raw https://tokenization.cs.uni-freiburg.de/training_mixed.txt.tar.gz
+# extract tar file into directory data/raw/tokenization_repair_mixed
+mkdir -p data/raw/tokenization_repair_mixed
+tar -xzf data/raw/training_mixed.txt.tar.gz -C data/raw/tokenization_repair_mixed
+# divide the data which is in one big .txt file into several smaller .txt files
+# for faster data processing later on
+python utils/subdivide_files.py \
+  --files data/raw/tokenization_repair_mixed/training_mixed.txt \
+  --lines-per-file 10000 \
+  --out-dir data/raw/tokenization_repair_mixed_split
+# convert all the .txt files into jsonl format, because that is required by the
+# trt library data preprocessing functionality (might take a while)
+python utils/txt_to_jsonl.py \
+  --in-dir data/raw/tokenization_repair_mixed_split \
+  --out-dir data/cleaned/tokenization_repair/mixed
+```
 
-`make download_data`
+To download the dataset with spelling and OCR errors execute the following commands:
+```bash
+# download raw text data as tar file and save it under data/raw
+wget -P data/raw https://tokenization.cs.uni-freiburg.de/training_mixed_ocr+spelling.txt.tar.gz
+# extract tar file into directory data/raw/tokenization_repair_mixed_with_errors
+mkdir -p data/raw/tokenization_repair_mixed_ocr_spelling_errors
+tar -xzf data/raw/training_mixed_ocr+spelling.txt -C data/raw/tokenization_repair_mixed_ocr_spelling_errors
+# divide the data which is in one big .txt file into several smaller .txt files
+# for faster data processing later on
+python utils/subdivide_files.py \
+  --files data/raw/tokenization_repair_mixed_ocr_spelling_errors/training_mixed_ocr+spelling.txt \
+  --lines-per-file 10000 \
+  --out-dir data/raw/tokenization_repair_mixed_ocr_spelling_errors_split
+# convert all the .txt files into jsonl format, because that is required by the
+# trt library data preprocessing functionality (might take a while)
+python utils/txt_to_jsonl.py \
+  --in-dir data/raw/tokenization_repair_mixed_ocr_spelling_errors_split \
+  --out-dir data/cleaned/tokenization_repair/mixed_with_errors
+```
 
-Clean and format the datasets using
-
-`python setup_data.py -i data -o data/cleaned -d wiki` and 
-`python setup_data.py -i data -o data/cleaned -d bookcorpus`
+You are now ready to use the generated .jsonl files to preprocess the LMDB datasets for model training.
 
 #### Preprocess data
 
-> *Skip this if you have already setup the data and/or mounted it into the 
-Docker container*
-
 All data preprocessing config files can be found in 
-`configs/data_preprocessing/tokenization_repair`.
+[configs/data_preprocessing/tokenization_repair](configs/data_preprocessing/tokenization_repair).
 
 To preprocess the data use the following command and replace 
 `<path_to_config_file>` with the preprocessing config file you want:
 
-`python -m tfnm_text.preprocess_data --config <path_to_config_file>`
+`python -m trt.preprocess_data --config <path_to_config_file>`
 
-If you e.g. want to preprocess the Wikipedia dataset for the EO models then execute:
+If you e.g. want to preprocess the Arxiv dataset with spelling and OCR errors for the EO models then execute:
 
-`python -m tfnm_text.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_wiki.yaml`
+`python -m trt.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_eo_arxiv_with_errors.yaml`
 
-Or if you e.g. want to preprocess the Wikipedia dataset for the NMT models then execute:
+Or if you e.g. want to preprocess the Arxiv dataset without spelling and OCR errors dataset for the NMT models then execute:
 
-`python -m tfnm_text.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_nmt_wiki.yaml`
+`python -m trt.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_nmt_arxiv_no_errors.yaml`
 
-> *You will need to set environment variables for some configs to work. 
-> You will get error messages when the variables are not set.*
+You will need to set environment variables for some configs to work, but you will get error messages when the 
+variables are not set.
 
 #### Model training
 
@@ -77,23 +96,37 @@ All training config files can be found in
 To train a model use the following command and replace 
 `<path_to_config_file>` with the preprocessing config file you want:
 
-`python -m tfnm_text.train --config <path_to_config_file>`
+`python -m trt.train --config <path_to_config_file>`
 
 If you e.g. want to train an EO model then execute:
 
-`python -m tfnm_text.train --config configs/train/tokenization_repair/eo.yaml`
+`python -m trt.train --config configs/train/tokenization_repair/eo.yaml`
 
-Or if you e.g. want to a NMT model then execute:
+Or if you e.g. want to train a NMT model then execute:
 
-`python -m tfnm_text.train --config configs/train/tokenization_repair/nmt.yaml`
+`python -m trt.train --config configs/train/tokenization_repair/nmt.yaml`
 
-> *You will need to set environment variables for some configs to work. 
-> You will get error messages when the variables are not set. \
-> Look in the blog post for some guidance on what values to set for the env variables. If you e.g. want to train 
-> an EO-small model then set the env variable NUM_LAYERS=2. \
-> You can also inspect the `config.yaml` files 
-> for every experiment in the `experiments` directory that you mounted from `/nfs/students/sebastian-walter/experiments`
-> when starting the Docker container. These `config.yaml` files are the actual files used
-> to achieve the results mentioned in the blog post. Be aware that the models from the blog post
-> were trained on 2 - 8 Nvidia Tesla V100 GPUs for 4 epochs max, so if you do not have similar compute resources 
-> available you might not be able to exactly match the results from the blog post.*
+> The training code only works for single or multi GPU training on a single node, so if you do want to train on
+> more than one node, for now you will need to rewrite the code to support it.
+ 
+> Be aware that the models from the paper were trained on 8 Nvidia RTX 2080 Ti GPUs for 4 epochs, 
+> so if you do not have similar compute resources available you might not be able to exactly reproduce the 
+> results from the paper.
+
+You will need to set environment variables for some configs to work, but you will get error messages when 
+the variables are not set.
+
+Instead of setting the environment variables, you can of course also copy the training config file 
+and overwrite the values directly.
+
+TODO: finish the table with env variables set for different models from the paper
+
+| Env variable      | eo_large_arxiv_with_errors | 
+|-------------------|----------------------------|
+| LMDB_PATH         | <path_to_lmdb>             |
+| BATCH_MAX_TOKENS* | 8192                       |
+| NUM_EPOCHS        | 4                          | 
+| NUM_LAYERS        | 12                         |
+
+*The number of tokens per batch is set per training process / GPU, so if you use a different number of 
+GPUs than 8, adjust this setting accordingly to keep the overall tokens per batch about the same.

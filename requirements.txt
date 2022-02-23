@@ -1,33 +1,33 @@
 # Dependencies of the trt library (Usage in brackets)
+# These are more or less the same dependenices that get installed during python setup.py install
+# (expect for mypy, flake8 and pytest)
 
 # modeling and math
-torch==1.10.2 # (Tensor operations and neural network components)
-einops==0.3.0 # (Einstein operators for PyTorch)
-numpy==1.19.5 # (General purpose math operations)
-spacy==3.0.4 # (Sentence splitting)
-tokenizers>=0.10.1 # (Fast tokenizer implementations)
+torch>=1.8.0 # (Tensor operations and neural network components)
+einops>=0.3.0 # (Einstein operators for PyTorch)
+numpy>=1.19.0 # (General purpose math operations)
+tokenizers>=0.10.0 # (Fast tokenizer implementations)
 
 # configuration
-pyyaml==5.4.1 # (Reading and writing yaml config files)
+pyyaml>=5.4.0 # (Reading and writing yaml config files)
 
 # data
-ftfy==5.9 # (Correcting Unicode erros and unifying text)
-lmdb==1.1.1 # (Fast Database to store large datasets)
-msgpack==1.0.2 # (Data (de-)serialization into LMDB)
-catalyst==20.12 # (For distributed data loading)
+lmdb>=1.1.0 # (Fast Database to store large datasets)
+msgpack>=1.0.0 # (Data (de-)serialization into LMDB)
+catalyst>=20.12 # (For distributed data loading)
 
 # utils
-tensorboard==2.8.0 # (Tensorboard logging)
-gputil==1.4.0 # (GPU Usage statistics)
-editdistance==0.5.3 # (Fast edit distance implementation)
-tqdm==4.49.0 # (Progress bars)
+tensorboard>=2.8.0 # (Tensorboard logging)
+gputil>=1.4.0 # (GPU Usage statistics)
+editdistance>=0.5.0 # (Fast edit distance implementation)
+tqdm>=4.49.0 # (Progress bars)
 
 # code style checks
-flake8==3.8.4 # (Code style and formatting)
-flake8-import-order==0.18.1 # (Plugin for flake8)
-flake8-print==4.0.0 # (Plugin for flake8)
-mypy==0.812 # (Static type checking)
+flake8>=3.8.0 # (Code style and formatting)
+flake8-import-order>=0.18.0 # (Plugin for flake8)
+flake8-print>=4.0.0 # (Plugin for flake8)
+mypy>=0.900 # (Static type checking)
 
 # testing
-pytest==6.2.2 # (Unit testing)
-pytest-xdist==2.2.1 # (Plugin to run pytest in parallel)
+pytest>=6.2.0 # (Unit testing)
+pytest-xdist>=2.2.0 # (Plugin to run pytest in parallel)

@@ -2,12 +2,9 @@ import argparse
 import pprint
 
 import lmdb
-
 import msgpack
+from tqdm import tqdm
 
-from tqdm.auto import tqdm
-
-from trt.model import tokenizer
 from trt.utils import common
 
 
@@ -48,31 +45,6 @@ if __name__ == "__main__":
 
         all_lengths_sorted = sorted(all_lengths)
         num_tokens = sum(all_lengths_sorted)
-        logger.info(f"Number of tokens in LMDB is {num_tokens}")
+        logger.info(f"Number of tokens in LMDB is {num_tokens:,}")
         logger.info(f"Average sample length is {num_tokens / len(all_lengths_sorted): .6f}")
         logger.info(f"Median sample length is {all_lengths_sorted[len(all_lengths_sorted) // 2]}")
-
-        keys_keys = msgpack.loads(txn.get(b"__keys__"))
-        idx = 0
-
-        tok = tokenizer.load_tokenizer("char")
-
-        failing_samples = []
-
-        for keys_key in tqdm(keys_keys, "Reading samples"):
-            keys = msgpack.loads(txn.get(keys_key))
-
-            for key in keys:
-                sample = msgpack.loads(txn.get(key))
-                if not len(sample["input_ids"]) == all_lengths[idx] == len(sample["labels"]):
-                    failing_samples.append((sample, all_lengths[idx]))
-                    lens = {k: len(v) for k, v in sample.items()}
-                    logger.info(
-                        f"Found invalid sample at index {idx} with lengths {lens} that should be {all_lengths[idx]}: "
-                        f"\n {sample}")
-                    logger.info(tok.decode(sample["input_ids"]))
-                    logger.info(tok.decode(sample["input_ids"], skip_special_tokens=False))
-
-                idx += 1
-
-        logger.info(f"Found {len(failing_samples)} invalid samples")
