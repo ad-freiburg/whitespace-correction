@@ -145,8 +145,7 @@ class TrainConfig(BaseConfig):
                  mixed_precision: bool,
                  eval_interval: int,
                  log_interval: int,
-                 keep_last_n_checkpoints: int,
-                 resume_from_checkpoint: str):
+                 keep_last_n_checkpoints: int):
         self.num_epochs: int = num_epochs
         self.swap_inputs_and_targets: bool = swap_inputs_and_targets
         self.loss: LossConfig = loss
@@ -163,7 +162,6 @@ class TrainConfig(BaseConfig):
         self.batch_size: int = batch_size
         self.batch_max_tokens: int = batch_max_tokens
         self.train_data: str = train_data
-        self.resume_from_checkpoint: str = resume_from_checkpoint
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "TrainConfig":
@@ -190,8 +188,7 @@ class TrainConfig(BaseConfig):
             mixed_precision=d.get("mixed_precision", False),
             eval_interval=d.get("eval_interval", 10000),
             log_interval=d.get("log_interval", 500),
-            keep_last_n_checkpoints=d.get("keep_last_n_checkpoints", -1),
-            resume_from_checkpoint=d.get("resume_from_checkpoint", None)
+            keep_last_n_checkpoints=d.get("keep_last_n_checkpoints", -1)
         )
         return config
 

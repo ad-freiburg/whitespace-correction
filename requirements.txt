@@ -14,7 +14,6 @@ pyyaml>=5.4.0 # (Reading and writing yaml config files)
 # data
 lmdb>=1.1.0 # (Fast Database to store large datasets)
 msgpack>=1.0.0 # (Data (de-)serialization into LMDB)
-catalyst>=20.12 # (For distributed data loading)
 
 # utils
 tensorboard>=2.8.0 # (Tensorboard logging)

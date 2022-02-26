@@ -18,9 +18,26 @@ export LMDB_PATH=$TMPDIR/lmdb
 
 echo "work dir: $WORKSPACE_DIR"
 echo "experiment dir: $EXPERIMENT_DIR"
-echo "lmdb: $LMDB_PATH"
+echo "lmdb path: $LMDB_PATH"
 
 random_port=$(python -c "import random; print(random.randrange(10000, 60000))")
 export TORCH_DIST_PORT=$random_port
 
-python -W ignore -m trt.train --config ${CONFIG?"CONFIG env variable not found"}
+config=${CONFIG:-""}
+resume=${RESUME:-""}
+
+if [[ ($config == "" && $resume == "") || ($config != "" && $resume != "") ]]; then
+  echo "Specify either CONFIG or RESUME, but not both or neither"
+  exit 1
+fi
+
+echo "GPU information:"
+nvidia-smi
+
+if [[ $config != "" ]]; then
+  echo "Starting training with config $config"
+  python -W ignore -m trt.train --config $config
+else
+  echo "Resuming training from experiment $resume"
+  python -W ignore -m trt.train --resume $resume --overwrite-train-data $LMDB_PATH
+fi

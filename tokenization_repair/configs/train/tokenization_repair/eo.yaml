@@ -34,7 +34,6 @@ train:
   eval_interval: ${EVAL_INTERVAL:10000}
   log_interval: ${LOG_INTERVAL:2500}
   keep_last_n_checkpoints: 1
-  resume_from_checkpoint: ${RESUME_FROM_CHECKPOINT:null}
 
 val:
   val_data: 5000

@@ -7,8 +7,6 @@ import time
 from collections import defaultdict
 from typing import Any, Callable, Dict, Iterator, List, Optional, Tuple, Union
 
-from catalyst.data import DistributedSamplerWrapper
-
 import lmdb
 
 import msgpack
@@ -18,7 +16,8 @@ import numpy as np
 import torch
 from torch import distributed as dist
 from torch.nn.utils import rnn
-from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler, Sampler, SequentialSampler, Subset
+from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler, Sampler, SequentialSampler, Subset, \
+    DistributedSampler
 
 from trt.model import tokenizer as toklib
 from trt.utils import common, constants, nlp
@@ -79,11 +78,6 @@ def _open_lmdb(lmdb_path: str) -> lmdb.Environment:
                     readahead=False,
                     meminit=False)
     return env
-
-
-def _worker_init_fn(i: int) -> None:
-    global logger
-    logger.info(f"Started data worker {i}")
 
 
 class PretokenizedDataset(Dataset, SequenceDatasetMixin):
@@ -254,12 +248,11 @@ class BucketSampler(Sampler):
                                                     f"and {self.max_tokens}"
         assert self.max_seq_len % self.bucket_span == 0, "max sequence length must be divisible by bucket span"
 
-        self.rand = np.random.RandomState(seed)
+        self.rand = random.Random(seed)
         self.batches = self._build_batches()
-        self._rebuild_batches = False
 
     def _build_batches(self, ) -> List[List[int]]:
-        logger.info("[BUCKETSAMPLER] Building buckets...")
+        logger.info("[BUCKETSAMPLER] Building buckets and batches...")
 
         if isinstance(self.data_source, PretokenizedDataset):
             indices_lengths = list(zip(list(range(len(self.data_source))),
@@ -288,8 +281,6 @@ class BucketSampler(Sampler):
                                     for bucket_idx in range(num_buckets)]
         batch_buckets: List[List[List[int]]] = [[] for _ in range(num_buckets)]
 
-        # if we dont shuffle here too always the same batches will be built
-
         if self.shuffle:
             self.rand.shuffle(indices_lengths)
 
@@ -305,37 +296,78 @@ class BucketSampler(Sampler):
                 batch_buckets[bucket_idx].append([idx])
 
         # unfold batches into list of lists
-        batches = [batch for bucket in batch_buckets for batch in bucket]
+        batches = [batch for bucket in batch_buckets for batch in bucket if len(batch) > 0]
         if self.shuffle:
             self.rand.shuffle(batches)
 
         return batches
 
     def __iter__(self) -> Iterator:
-        if self._rebuild_batches:
-            self.batches = self._build_batches()
-            self._rebuild_batches = False
-
         for batch in self.batches:
             yield batch
-
-        self._rebuild_batches = True
 
     def __len__(self) -> int:
         return len(self.batches)
 
 
+# modified version of
+# https://catalyst-team.github.io/catalyst/_modules/catalyst/data/dataset/torch.html#DatasetFromSampler
+class SamplerDataset(Dataset):
+    def __init__(self, sampler: Sampler) -> None:
+        super().__init__()
+        self.sampler = sampler
+        self.sampler_indices = None
+
+    def __getitem__(self, idx: int) -> Any:
+        if self.sampler_indices is None:
+            self.sampler_indices = list(self.sampler)
+        return self.sampler_indices[idx]
+
+    def __len__(self) -> int:
+        return len(self.sampler)
+
+
+# modified version of
+# https://catalyst-team.github.io/catalyst/_modules/catalyst/data/sampler.html#DistributedSamplerWrapper
+class DistributedDynamicSampler(DistributedSampler):
+    def __init__(self,
+                 sampler: Sampler,
+                 seed: int,
+                 drop_last: bool = False,
+                 shuffle: bool = True) -> None:
+        super().__init__(SamplerDataset(sampler),
+                         shuffle=shuffle,
+                         seed=seed,
+                         drop_last=drop_last)
+        self.sampler = sampler
+        self.steps_to_fast_forward = 0
+
+    def __iter__(self) -> List[int]:
+        self.dataset = SamplerDataset(self.sampler)
+
+        dist_indices = list(super().__iter__())
+        sampler_indices = self.dataset
+
+        for idx in dist_indices[self.steps_to_fast_forward:]:
+            yield sampler_indices[idx]
+
+    def set_epoch(self, epoch: int) -> None:
+        super().set_epoch(epoch)
+        if hasattr(self.sampler, "set_epoch"):
+            self.sampler.set_epoch(epoch)
+
+    def set_steps_to_fast_forward(self, steps: int) -> None:
+        self.steps_to_fast_forward = steps
+
+    def __len__(self) -> int:
+        return super().__len__() - self.steps_to_fast_forward
+
+
 def get_data_from_config(train_config: TrainConfig,
                          val_config: ValConfig,
+                         seed: int,
                          pad_token_id: int) -> Tuple[DataLoader, DataLoader]:
     transform_fn = get_transform_fn("swap_inputs_and_targets") if train_config.swap_inputs_and_targets else None
-
-    # if bool(os.environ.get("TEST_GPU_USAGE", False)):
-    #     # Dummy dataset to test max GPU usage and other stuff
-    #     dataset = MaxSeqLenDataset(max_seq_len=train_config.max_seq_length,
-    #                                max_sequences=100000,
-    #                                input_vocab_size=encoder_tokenizer.get_vocab_size(),
-    #                                output_vocab_size=decoder_tokenizer.get_vocab_size())
 
     dataset = PretokenizedDataset(lmdb_path=train_config.train_data,
                                   pad_token_id=pad_token_id,
@@ -357,7 +389,8 @@ def get_data_from_config(train_config: TrainConfig,
         val_collate = val_dataset.get_collate_fn()
 
     elif isinstance(val_config.val_data, float) or isinstance(val_config.val_data, int):
-        indices = torch.randperm(len(dataset)).tolist()
+        rand = np.random.default_rng(seed)
+        indices = rand.permutation(len(dataset))
         if isinstance(val_config.val_data, float):
             assert 0 < val_config.val_data < 1, "val data has to be a float between 0 and 1"
             val_upper = int(len(indices) * val_config.val_data)
@@ -386,38 +419,39 @@ def get_data_from_config(train_config: TrainConfig,
                                       min_seq_len=train_config.min_seq_length,
                                       max_seq_len=train_config.max_seq_length,
                                       bucket_span=4,
-                                      shuffle=True)
+                                      shuffle=True,
+                                      seed=seed)
         val_sampler = BucketSampler(data_source=val_dataset,
                                     max_tokens=train_config.batch_max_tokens,
                                     min_seq_len=train_config.min_seq_length,
                                     max_seq_len=train_config.max_seq_length,
                                     bucket_span=4,
-                                    shuffle=False)
+                                    shuffle=False,
+                                    seed=seed)
 
     else:
         assert train_config.batch_size is not None, "one of batch_max_tokens or batch_size must be specified"
-        train_sampler = BatchSampler(sampler=RandomSampler(train_dataset),
+        train_generator = torch.Generator()
+        train_generator = train_generator.manual_seed(seed)
+        train_sampler = BatchSampler(sampler=RandomSampler(train_dataset, generator=train_generator),
                                      batch_size=train_config.batch_size,
-                                     drop_last=False)
+                                     drop_last=True)
         val_sampler = BatchSampler(sampler=SequentialSampler(val_dataset),
                                    batch_size=train_config.batch_size,
                                    drop_last=False)
 
-    train_sampler_dist = DistributedSamplerWrapper(sampler=train_sampler, shuffle=True)
-    val_sampler_dist = DistributedSamplerWrapper(sampler=val_sampler, shuffle=False)
+    train_sampler_dist = DistributedDynamicSampler(sampler=train_sampler, shuffle=True, seed=seed, drop_last=True)
 
     train_loader = DataLoader(train_dataset,
                               batch_sampler=train_sampler_dist,
                               pin_memory=True,
                               num_workers=train_config.num_workers,
-                              collate_fn=train_collate,
-                              worker_init_fn=_worker_init_fn)
+                              collate_fn=train_collate)
     val_loader = DataLoader(val_dataset,
-                            batch_sampler=val_sampler_dist,
+                            batch_sampler=val_sampler,
                             pin_memory=True,
                             num_workers=0,
-                            collate_fn=val_collate,
-                            worker_init_fn=_worker_init_fn)
+                            collate_fn=val_collate)
 
     return train_loader, val_loader
 

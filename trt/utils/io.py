@@ -20,6 +20,7 @@ def save_checkpoint(checkpoint_path: str,
                     optimizer: optim.Optimizer,
                     step: int,
                     epoch: int,
+                    val_loss: float,
                     lr_scheduler: Optional[LR_SCHEDULER_TYPE] = None,
                     grad_scaler: Optional[amp.GradScaler] = None) -> None:
     """
@@ -44,7 +45,8 @@ def save_checkpoint(checkpoint_path: str,
         "lr_scheduler_state_dict": None if lr_scheduler is None else lr_scheduler.state_dict(),
         "grad_scaler_state_dict": None if grad_scaler is None else grad_scaler.state_dict(),
         "step": step,
-        "epoch": epoch
+        "epoch": epoch,
+        "val_loss": val_loss
     }
     torch.save(state, f=checkpoint_path)
 

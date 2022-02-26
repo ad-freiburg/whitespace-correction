@@ -22,7 +22,6 @@ setup(
         "train": [
             "lmdb>=1.1.0",
             "msgpack>=1.0.0",
-            "catalyst>=20.12",
             "tensorboard>=2.8.0",
             "gputil>=1.4.0",
         ]

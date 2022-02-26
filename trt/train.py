@@ -17,6 +17,7 @@ from torch import multiprocessing as mp
 from torch import nn
 from torch import optim
 from torch.cuda import amp
+from torch.backends import cudnn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -27,18 +28,23 @@ from trt.utils.lr_schedule import LR_SCHEDULER_TYPE
 from trt.utils.optimizer import get_optimizer_from_config
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+# disable parallelism for tokenizers explicitly
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--config", type=str, required=True,
-                        help="Path to config file")
+    train_group = parser.add_mutually_exclusive_group(required=True)
+    train_group.add_argument("-c", "--config", type=str, default=None)
+    train_group.add_argument("-r", "--resume", type=str, default=None)
+    parser.add_argument("--overwrite-train-data", type=str, default=None)
+    parser.add_argument("--overwrite-val-data", type=str, default=None)
     return parser.parse_args()
 
 
 # globals used by training and/or evaluation function
 step: int = 0
-total_batch_num: int = 0
+steps_to_fast_forward: int = 0
 epoch: int = 0
 best_val_loss: float = float("inf")
 logger = common.get_logger("TRAIN")
@@ -89,16 +95,19 @@ def train_one_epoch(model: DDP,
                     model_name: str,
                     model_type: str) -> None:
     global step
-    global total_batch_num
+    global steps_to_fast_forward
     global best_val_loss
     global logger
     global epoch
 
     rank = dist.get_rank()
 
-    model.train()
+    model = model.train()
     model = model.to(device)
     criterion = criterion.to(device)
+
+    begin_of_epoch = time.perf_counter()
+    start = time.perf_counter()
 
     if rank == 0:
         mean_loss = metrics.AverageMetric(name="loss")
@@ -109,24 +118,11 @@ def train_one_epoch(model: DDP,
         mean_bsz = metrics.AverageMetric(name="batch_size")
         batch_sizes = []
         batch_padded_seq_lengths = []
-        boe = time.monotonic()
-        start = boe
 
     train_loader_length = len(train_loader)
     logger.info(f"[rank:{rank}] [epoch:{epoch + 1}] train_loader_length: {train_loader_length}")
 
-    steps_to_fast_forward = step - total_batch_num
     for batch_num, batch in enumerate(train_loader):
-        # fast forward to last batch when resuming training
-        total_batch_num += 1
-        if total_batch_num <= step:
-            if total_batch_num % max(steps_to_fast_forward // 10, 1) == 0:
-                logger.info(
-                    f"[rank:{rank}] fast forwarding {batch_num + 1}/{steps_to_fast_forward} "
-                    f"(target: {step})"
-                )
-            continue
-
         step += 1
 
         inputs, labels = prepare_batch(batch=batch,
@@ -172,9 +168,7 @@ def train_one_epoch(model: DDP,
         if lr_scheduler is not None:
             lr_scheduler.step()
 
-        if step % eval_interval == 0:
-            # synchronize before evaluation
-            dist.barrier()
+        if step % eval_interval == 0 and rank == 0:
             val_loss = evaluate(model_type=model_type,
                                 model=model,
                                 encoder_tokenizer=encoder_tokenizer,
@@ -184,38 +178,40 @@ def train_one_epoch(model: DDP,
                                 text_metrics=text_metrics,
                                 summary_writer=summary_writer,
                                 device=device)
-            if rank == 0:
-                io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-{step}.pt"),
+            io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-{step}.pt"),
+                               model=model,
+                               optimizer=optimizer,
+                               lr_scheduler=lr_scheduler,
+                               grad_scaler=mixed_prec_scaler,
+                               step=step,
+                               epoch=epoch,
+                               val_loss=val_loss)
+            io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-last.pt"),
+                               model=model,
+                               optimizer=optimizer,
+                               lr_scheduler=lr_scheduler,
+                               grad_scaler=mixed_prec_scaler,
+                               step=step,
+                               epoch=epoch,
+                               val_loss=val_loss)
+            if val_loss < best_val_loss:
+                best_val_loss = val_loss
+                io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-best.pt"),
                                    model=model,
                                    optimizer=optimizer,
                                    lr_scheduler=lr_scheduler,
                                    grad_scaler=mixed_prec_scaler,
                                    step=step,
-                                   epoch=epoch)
-                io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-last.pt"),
-                                   model=model,
-                                   optimizer=optimizer,
-                                   lr_scheduler=lr_scheduler,
-                                   grad_scaler=mixed_prec_scaler,
-                                   step=step,
-                                   epoch=epoch)
-                if val_loss < best_val_loss:
-                    best_val_loss = val_loss
-                    io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-best.pt"),
-                                       model=model,
-                                       optimizer=optimizer,
-                                       lr_scheduler=lr_scheduler,
-                                       grad_scaler=mixed_prec_scaler,
-                                       step=step,
-                                       epoch=epoch)
+                                   epoch=epoch,
+                                   val_loss=val_loss)
 
-                if keep_last_n_checkpoints > 0:
-                    # first get all checkpoints
-                    all_checkpoints = io.last_n_checkpoints(checkpoint_dir=checkpoint_dir, n=-1)
-                    for checkpoint in all_checkpoints[:-keep_last_n_checkpoints]:
-                        os.remove(checkpoint)
+            if keep_last_n_checkpoints > 0:
+                # first get all checkpoints
+                all_checkpoints = io.last_n_checkpoints(checkpoint_dir=checkpoint_dir, n=-1)
+                for checkpoint in all_checkpoints[:-keep_last_n_checkpoints]:
+                    os.remove(checkpoint)
 
-            model.train()
+            model = model.train()
 
         if step % log_interval == 0 and rank == 0:
             with StringIO() as buf, redirect_stdout(buf):
@@ -223,7 +219,6 @@ def train_one_epoch(model: DDP,
                 util = buf.getvalue().strip()
                 logger.info(f"[{step}] GPU utilization:\n{util}")
 
-            # only log on master process
             if lr_scheduler is not None:
                 lr = lr_scheduler.get_last_lr()[0]
                 summary_writer.add_scalar("train_lr", lr, step)
@@ -257,10 +252,10 @@ def train_one_epoch(model: DDP,
                                          step,
                                          bins=n_bins)
 
-            end = time.monotonic()
+            end = time.perf_counter()
             logger.info(f"[{step}] [train_time:{step - log_interval}\u2192{step}] {(end - start) / 60:.2f} minutes")
             logger.info(f"[{step}] [epoch:{epoch + 1}] "
-                        f"{common.eta_minutes((end - boe) / 60, batch_num + 1, len(train_loader))}")
+                        f"{common.eta_minutes((end - begin_of_epoch) / 60, batch_num + 1, len(train_loader))}")
 
             mean_forward_pass.reset()
             mean_loss.reset()
@@ -281,20 +276,21 @@ def evaluate(model_type: str,
              device: torch.device) -> float:
     global step
     global logger
-    model.eval()
+
+    model = model.eval()
     model = model.to(device)
     criterion = criterion.to(device)
 
     rank = dist.get_rank()
+    assert rank == 0, f"evaluation should be only done on main process"
 
     mean_loss = metrics.AverageMetric(name="loss")
     additional_losses = {}
     rand_batch_idx = torch.randint(low=0, high=len(val_loader), size=(1,)).item()
 
-    if rank == 0:
-        tm: List[metrics.TextMetric] = [metrics.get_text_metric(metric_conf.name, **metric_conf.arguments)
-                                        for metric_conf in text_metrics]
-        start = time.monotonic()
+    tm: List[metrics.TextMetric] = [metrics.get_text_metric(metric_conf.name, **metric_conf.arguments)
+                                    for metric_conf in text_metrics]
+    start = time.perf_counter()
 
     with torch.no_grad():
         for batch_num, batch in enumerate(val_loader):
@@ -315,7 +311,7 @@ def evaluate(model_type: str,
 
             # evaluate text metrics always on the first batch (to see development across evaluations)
             # and one random batch (to see also other examples, see below)
-            if batch_num == 0 and rank == 0:
+            if batch_num == 0:
                 for metric in tm:
                     metric.add(inputs=inputs,
                                outputs=output,
@@ -328,7 +324,7 @@ def evaluate(model_type: str,
                                             step)
                     logger.info(f"[{step}] val_{metric.name()}: {text}")
 
-            if batch_num == rand_batch_idx and rank == 0:
+            if batch_num == rand_batch_idx:
                 for metric in tm:
                     metric.add(inputs=inputs,
                                outputs=output,
@@ -342,26 +338,29 @@ def evaluate(model_type: str,
                     logger.info(f"[{step}] val_{metric.name()}_rand: {text}")
 
     val_loss = mean_loss.calc()
-    if rank == 0:
-        summary_writer.add_scalar("val_loss", val_loss, step)
-        logger.info(f"[{step}] val_loss: {val_loss:.8f}")
+    summary_writer.add_scalar("val_loss", val_loss, step)
+    logger.info(f"[{step}] val_loss: {val_loss:.8f}")
 
-        for loss_name, loss_metric in additional_losses.items():
-            loss_value = loss_metric.calc()
-            logger.info(f"[{step}] val_{loss_name}: {loss_value:.8f}")
-            summary_writer.add_scalar(f"val_{loss_name}", loss_value, step)
+    for loss_name, loss_metric in additional_losses.items():
+        loss_value = loss_metric.calc()
+        logger.info(f"[{step}] val_{loss_name}: {loss_value:.8f}")
+        summary_writer.add_scalar(f"val_{loss_name}", loss_value, step)
 
-        end = time.monotonic()
-        logger.info(f"[val_time:{step}] {(end - start) / 60:.2f} minutes")
-
+    end = time.perf_counter()
+    logger.info(f"[val_time:{step}] {(end - start) / 60:.2f} minutes")
     return val_loss
 
 
 def train(rank: int,
           cfg: config.Config,
-          directories: Dict[str, str]) -> None:
+          directories: Dict[str, str],
+          resuming: bool) -> None:
     global logger
     global epoch
+    global step
+    global steps_to_fast_forward
+    global best_val_loss
+
     log_file = os.path.join(directories["experiment"], "logs.txt")
     common.add_file_log(logger, log_file)
     common.add_file_log(data.logger, log_file)
@@ -373,7 +372,9 @@ def train(rank: int,
     if cfg.seed:
         torch.manual_seed(cfg.seed)
         torch.cuda.manual_seed(cfg.seed)
-        # torch.autograd.set_detect_anomaly = True
+
+    torch.backends.cudnn.benchmark = True
+    torch.use_deterministic_algorithms(False)
 
     device = torch.device(f"cuda:{rank}")
     torch.cuda.set_device(rank)
@@ -384,6 +385,7 @@ def train(rank: int,
     pad_token_id = encoder_tokenizer.token_to_id(constants.PAD)
     train_loader, val_loader = data.get_data_from_config(train_config=cfg.train,
                                                          val_config=cfg.val,
+                                                         seed=cfg.seed,
                                                          pad_token_id=pad_token_id)
 
     ignore_index = decoder_tokenizer.token_to_id(constants.PAD)
@@ -417,27 +419,34 @@ def train(rank: int,
         logger.info(f"Type 'tensorboard --logdir {directories['tensorboard']}' "
                     f"to view the training process in Tensorboard")
 
-    if cfg.train.resume_from_checkpoint is not None:
-        if rank == 0:
-            logger.info(f"Resuming training from checkpoint {cfg.train.resume_from_checkpoint}")
-        checkpoint = io.load_checkpoint(cfg.train.resume_from_checkpoint)
+    if resuming:
+        last_checkpoint = io.last_n_checkpoints(directories["checkpoints"], 1)[0]
+        checkpoint = io.load_checkpoint(last_checkpoint)
         io.load_state_dict(model, checkpoint["model_state_dict"])
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         if lr_scheduler is not None and checkpoint.get("lr_scheduler_state_dict") is not None:
             lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
         if mixed_prec_scaler is not None and checkpoint.get("grad_scaler_state_dict") is not None:
             mixed_prec_scaler.load_state_dict(checkpoint["grad_scaler_state_dict"])
-        global step
-        global total_batch_num
+
         step = checkpoint["step"]
         epoch = checkpoint["epoch"]
-        total_batch_num = len(train_loader) * epoch
+        best_val_loss = checkpoint["val_loss"]
+        steps_to_fast_forward = step % max(len(train_loader), 1)
+
+        if rank == 0:
+            logger.info(
+                f"Resuming training from checkpoint {last_checkpoint}\n"
+                f"Starting at epoch {epoch + 1} at step {step} with a best validation loss of {best_val_loss}\n"
+                f"Need to fast forward {steps_to_fast_forward} steps"
+            )
 
     ddp_model: transformer.TransformerModel = DDP(model, device_ids=[rank], output_device=rank)
 
     while epoch < cfg.train.num_epochs:
+        train_loader.batch_sampler: data.DistributedDynamicSampler
         train_loader.batch_sampler.set_epoch(epoch)
-        val_loader.batch_sampler.set_epoch(epoch)
+        train_loader.batch_sampler.set_steps_to_fast_forward(steps_to_fast_forward)
 
         train_one_epoch(model=ddp_model,
                         encoder_tokenizer=encoder_tokenizer,
@@ -459,6 +468,7 @@ def train(rank: int,
                         model_type=cfg.model.type)
 
         epoch += 1
+        steps_to_fast_forward = 0
 
 
 def setup_distributed(rank: int, world_size: int) -> None:
@@ -478,32 +488,21 @@ def cleanup_distributed() -> None:
 def train_distributed(rank: int,
                       world_size: int,
                       cfg: config.Config,
-                      directories: Dict[str, str]) -> None:
+                      directories: Dict[str, str],
+                      resuming: bool) -> None:
     setup_distributed(rank, world_size)
 
-    train(rank, cfg, directories)
+    train(rank, cfg, directories, resuming)
 
     cleanup_distributed()
 
 
-def setup_directories(cfg: config.Config) -> Dict[str, str]:
-    # disable parallelism for tokenizers explicitly
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
+def setup_experiment_dir(cfg: config.Config) -> str:
     experiment_name = re.sub(r"\s", "_", cfg.experiment)
     experiment_subdir = f"{experiment_name}-{datetime.today().strftime('%Y-%m-%d-%H_%M_%S')}"
-    experiment_dir = os.path.join(cfg.experiment_dir,
-                                  experiment_subdir)
-    checkpoint_dir = os.path.join(experiment_dir, "checkpoints")
-    tensorboard_dir = os.path.join(experiment_dir, "tensorboard")
-
+    experiment_dir = os.path.join(cfg.experiment_dir, experiment_subdir)
     os.makedirs(experiment_dir)
-    os.makedirs(checkpoint_dir)
-    os.makedirs(tensorboard_dir)
-
-    return {"experiment": experiment_dir,
-            "checkpoints": checkpoint_dir,
-            "tensorboard": tensorboard_dir}
+    return experiment_dir
 
 
 def check_gpus() -> int:
@@ -520,25 +519,42 @@ def check_gpus() -> int:
 
 
 def main(args: argparse.Namespace) -> None:
-    cfg = config.Config.from_yaml(args.config)
+    if args.config is not None:
+        cfg = config.Config.from_yaml(args.config)
+        experiment_dir = setup_experiment_dir(cfg)
+        # save copy of config file to experiment directory
+        with open(os.path.join(experiment_dir, "config.yaml"), "w", encoding="utf8") as f:
+            f.write(str(cfg))
+        resuming = False
+    else:
+        experiment_dir = args.resume
+        cfg = config.Config.from_yaml(os.path.join(experiment_dir, "config.yaml"))
+        if args.overwrite_train_data is not None:
+            logger.info(f"Overriding train data to {args.overwrite_train_data}")
+            cfg.train.train_data = args.overwrite_train_data
+        if args.overwrite_val_data is not None:
+            logger.info(f"Overriding val data to {args.overwrite_train_data}")
+            cfg.val.val_data = args.overwrite_val_data
+        resuming = True
+
+    directories = {
+        "experiment": experiment_dir,
+        "checkpoints": os.path.join(experiment_dir, "checkpoints"),
+        "tensorboard": os.path.join(experiment_dir, "tensorboard")
+    }
+    os.makedirs(directories["checkpoints"], exist_ok=True)
+    os.makedirs(directories["tensorboard"], exist_ok=True)
 
     # check gpu environment
     world_size = check_gpus()
 
-    # setup necessary directories for training
-    directories = setup_directories(cfg)
-
-    # save copy of config file to experiment directory
-    with open(os.path.join(directories["experiment"], "config.yaml"), "w", encoding="utf8") as f:
-        f.write(str(cfg))
-
     # start distributed training
     mp.spawn(train_distributed,
-             args=(world_size, cfg, directories),
+             args=(world_size, cfg, directories, resuming),
              nprocs=world_size,
              join=True)
 
 
 if __name__ == "__main__":
-    mp.set_start_method('spawn')
+    mp.set_start_method("spawn")
     main(parse_args())
