@@ -1,5 +1,7 @@
 | Model                                                     |   Sequence accuracy |       MNED |       MED |        F1 |   Precision |     Recall |
 |:----------------------------------------------------------|--------------------:|-----------:|----------:|----------:|------------:|-----------:|
+| eo_large_arxiv_with_errors_temp_thres_optimized           |            0.955288 | 0.00177781 | 0.088998  | 0.831515  |   0.876491  | 0.79093    |
+| eo_large_arxiv_with_errors                                |            0.955288 | 0.00177781 | 0.088998  | 0.831515  |   0.876491  | 0.79093    |
 | nmt_large_arxiv_no_errors_finetuned                       |            0.955288 | 0.00164331 | 0.0822751 | 0.850262  |   0.859442  | 0.841276   |
 | eo_large_arxiv_no_errors_finetuned_temp_thres_optimized   |            0.955074 | 0.00172877 | 0.0902785 | 0.827769  |   0.880087  | 0.781322   |
 | eo_large_arxiv_no_errors_finetuned                        |            0.953687 | 0.00173137 | 0.0917725 | 0.82584   |   0.87286   | 0.783628   |

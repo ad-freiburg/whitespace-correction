@@ -13,6 +13,8 @@ from trt.model import transformer
 
 from trt.utils import common, config, io, inference, nlp, tokenization_repair
 
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 __all__ = ["ModelInfo", "get_available_models", "TokenizationRepairer"]
 
 ModelInfo = collections.namedtuple("ModelInfo", ["name", "description"])
@@ -98,7 +100,7 @@ class TokenizationRepairer:
             with open(os.path.join(model_dir, "temperature_no_spaces.pkl"), "rb") as tf:
                 self.inference_kwargs["temperature_no_spaces"] = pickle.load(tf)
             self.logger.debug(f"Found temperature (no spaces) file: setting temperature to "
-                             f"{self.inference_kwargs['temperature_no_spaces']}")
+                              f"{self.inference_kwargs['temperature_no_spaces']}")
         if os.path.exists(os.path.join(model_dir, "thresholds_and_default.pkl")):
             with open(os.path.join(model_dir, "thresholds_and_default.pkl"), "rb") as tf:
                 self.inference_kwargs["thresholds_and_default"] = pickle.load(tf)
@@ -204,3 +206,8 @@ class TokenizationRepairer:
             return None
         else:
             return outputs
+
+    def to(self, device: Union[str, int]) -> "TokenizationRepairer":
+        self.device = torch.device(device)
+        self.model = self.model.to(self.device)
+        return self
