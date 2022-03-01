@@ -82,6 +82,9 @@ trt -i
                     # (equivalent to TokenizationRepairer.from_experiment(experiment_dir) in python API)
 ```
 
+> Note: When first using `trt` with a pretrained model, the model needs to be downloaded, so depending on 
+> your internet speed the command might take considerably longer.
+
 > Note: Loading the tokenization repair model requires an initial startup time each time you 
 > invoke the `trt` command. CPU startup time is around 1s, GPU startup time around 3.5s, so for small 
 > inputs or files you should probably pass the `-c` flag to force CPU execution for best performance.

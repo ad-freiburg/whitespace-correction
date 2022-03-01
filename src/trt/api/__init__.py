@@ -33,7 +33,7 @@ StringInputOutput = Union[str, List[str]]
 class TokenizationRepairer:
     @staticmethod
     def from_pretrained(
-            model: str = "eo_arxiv_with_errors",
+            model: str = get_available_models()[0].name,
             use_gpu: bool = True,
             cache_dir: Optional[str] = None
     ) -> "TokenizationRepairer":
