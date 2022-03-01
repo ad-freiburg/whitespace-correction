@@ -1,13 +1,25 @@
-from distutils.core import setup
+from setuptools import setup, find_packages
+
+with open("README.md", "r", encoding="utf8") as rdm:
+    long_description = rdm.read()
+
+with open("src/trt/version.py", "r") as vf:
+    version = vf.readlines()[-1].strip().split()[-1].strip("\"'")
+    print(version)
 
 setup(
     name="trt",
-    version="0.1.0",
+    version=version,
     description="Tokenization repair using Transformers",
+    long_description=long_description,
+    long_description_content_type="text/markdown",
     author="Sebastian Walter",
     author_email="swalter@tf.uni-freiburg.de",
-    packages=[
-        "trt"
+    python_requires=">=3.6",
+    package_dir={"": "src"},
+    packages=find_packages(where="src"),
+    scripts=[
+        "bin/trt"
     ],
     install_requires=[
         "torch>=1.8.0",

@@ -1,17 +1,24 @@
 import random
 import string
-from typing import List, Tuple
+from typing import Tuple
+import sys
+
+sys.path.append("..")
 
 import numpy as np
-
 import pytest
-
-from tests.conftest import randomly_insert_whitespaces
 
 from trt.utils import nlp
 
+from conftest import randomly_insert_whitespaces
+
 
 class TestNLP:
+    @staticmethod
+    def hamming_dist(a: str, b: str) -> int:
+        assert len(a) == len(b)
+        return sum(ac != bc for ac, bc in zip(a, b))
+
     @staticmethod
     def add_noise(s: str, p: float, seed: int) -> str:
         rand = random.Random(seed)
@@ -46,20 +53,20 @@ class TestNLP:
     ])
     @pytest.mark.parametrize("seed", list(range(20)))
     def test_edit_token(self, token: str, include: Tuple[int], seed: int) -> None:
-        edited_token = nlp.edit_token(token, include=include, rand=np.random.RandomState(seed))
-        if include == (0, ):
+        edited_token, edited_indices = nlp.edit_token(token, include=include, rand=np.random.RandomState(seed))
+        if include == (0,):
             # insert
-            assert len(edited_token) == len(token) + 1
-        elif include == (1, ):
+            assert len(edited_token) == len(token) + 1, f"{edited_token} and {token} should differ 1 in length"
+        elif include == (1,):
             # delete
-            assert len(edited_token) == len(token) - 1
-        elif include == (2, ):
+            assert len(edited_token) == len(token) - 1, f"{edited_token} and {token} should differ 1 in length"
+        elif include == (2,):
             # swap
-            assert len(token) == len(edited_token)
-            assert set(token) - set(edited_token) == {}
-        elif include == (3, ):
+            assert len(token) == len(edited_token), f"{edited_token} and {token} have different lengths"
+            assert len(set(token).symmetric_difference(set(edited_token))) == 0, \
+                f"{edited_token} and {token} contain different chars"
+        elif include == (3,):
             # replace
-            assert len(token) == len(edited_token)
-            assert len(set(token) - set(edited_token)) == 1
-
-        assert edited_token != token
+            assert len(token) == len(edited_token), f"{edited_token} and {token} have different lengths"
+            assert TestNLP.hamming_dist(token, edited_token) == 1, \
+                f"{edited_token} and {token} should differ in 1 char"

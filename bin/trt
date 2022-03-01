@@ -1,0 +1,143 @@
+#!/usr/bin/env python
+
+import argparse
+import sys
+import logging
+
+import trt
+from trt import get_available_models, TokenizationRepairer
+
+
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        "Tokenization repair using Transformers",
+        description="Repair tokenization in text by inserting missing or deleting superfluous whitespaces"
+    )
+    parser.add_argument(
+        "-m",
+        "--model",
+        choices=[model.name for model in get_available_models()],
+        default=get_available_models()[0].name,
+        help="Name of the model to use for tokenization repair"
+    )
+    input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
+        "-f",
+        "--file",
+        type=str,
+        default=None,
+        help="Path to a text file which will be repaired line by line"
+    )
+    input_group.add_argument(
+        "-i",
+        "--interactive",
+        action="store_true",
+        default=None,
+        help="Start an interactive session where your command line input is repaired"
+    )
+    parser.add_argument(
+        "-o",
+        "--out-path",
+        type=str,
+        default=None,
+        help="Path where repaired text should be saved to"
+    )
+    parser.add_argument(
+        "-c",
+        "--cpu",
+        action="store_true",
+        help="Force to run the model on CPU, by default a GPU is used if available"
+    )
+    parser.add_argument(
+        "-b",
+        "--batch-size",
+        type=int,
+        default=16,
+        help="Determines how many inputs will be repaired at the same time, larger values should usually result in "
+             "faster repairing but require more memory"
+    )
+    parser.add_argument(
+        "-u",
+        "--unsorted",
+        action="store_true",
+        help="Disable sorting of the inputs before repairing (for a large number of inputs or large text files sorting "
+             "the sequences beforehand leads to speed ups because it minimizes the amount of padding needed "
+             "within a batch of sequences)"
+    )
+    parser.add_argument(
+        "-e",
+        "--experiment",
+        type=str,
+        default=None,
+        help="Path to an experiment directory from which the model will be loaded "
+             "(use this when you trained your own model and want to use it)"
+    )
+    parser.add_argument(
+        "-l",
+        "--list",
+        action="store_true",
+        help="List all available models with short descriptions"
+    )
+    parser.add_argument(
+        "-p",
+        "--progress",
+        action="store_true",
+        help="Show a progress bar (this flag is only used when getting input from stdin, "
+             "in interactive mode with -i progress is never shown, "
+             "when repairing a file with -f progress is always shown)"
+    )
+    parser.add_argument(
+        "-v",
+        "--version",
+        action="store_true",
+        help="Print the version of the trt library"
+    )
+    return parser.parse_args()
+
+
+def run(args: argparse.Namespace) -> None:
+    if args.version:
+        print(f"trt version={trt.__version__}")
+        return
+    if args.list:
+        model_str = "\n".join(f"- {model.name}: {model.description}" for model in get_available_models())
+        print(f"Available models:\n{model_str}")
+        return
+
+    tok_rep = TokenizationRepairer.from_pretrained(model=args.model, use_gpu=not args.cpu)
+
+    if args.file is not None:
+        repaired_lines = tok_rep.repair_file(
+            input_file_path=args.file,
+            output_file_path=args.out_path,
+            batch_size=args.batch_size,
+            sort_by_length=not args.unsorted
+        )
+        if args.out_path is None:
+            for line in repaired_lines:
+                print(line)
+    elif args.interactive:
+        while True:
+            try:
+                input_line = input()
+                print(tok_rep.repair_text(input_line))
+            except KeyboardInterrupt:
+                return
+    else:
+        if sys.stdin.isatty():
+            return
+        lines = [line.strip() for line in sys.stdin]
+        repaired_lines = tok_rep.repair_text(
+            inputs=lines,
+            batch_size=args.batch_size,
+            sort_by_length=not args.unsorted,
+            show_progress=args.progress
+        )
+        for line in repaired_lines:
+            print(line)
+
+
+if __name__ == "__main__":
+    # disable logging since we do not want that for our command line interface
+    logging.disable(logging.CRITICAL)
+    run(parse_args())

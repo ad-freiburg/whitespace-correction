@@ -2,7 +2,7 @@
 
 ### Installation
 
-This project is mainly tested with Python 3.8, but should work fine with Python 3.7 and newer versions
+This project is mainly tested with Python 3.8, but should work fine with Python 3.6 and newer versions
 
 ```bash
 git clone git@github.com:bastiscode/trt.git
@@ -19,8 +19,14 @@ pip install -r tokenization_repair/requirements.txt
 
 ### Usage
 
+#### From python
 ```python
-from trt import TokenizationRepairer
+from trt import TokenizationRepairer, get_available_models
+
+# list all available models
+print(get_available_models())
+
+# create a tokenization repair instance, using the default pretrained model
 tok_rep = TokenizationRepairer.from_pretrained()
 
 # repair single strings
@@ -36,14 +42,49 @@ repaired_strings = tok_rep.repair_text([
 repaired_lines = tok_rep.repair_file("path/to/file.txt")
 # optionally specify a output file
 repaired_lines = tok_rep.repair_file("path/to/file.txt", output_file_path="save/output/here.txt")
-
 ```
 
-List available models
-```python
-from trt import get_available_models
-print(get_available_models())
+#### From command line
+
+After installation the command `trt` is available in your python environment. It lets you use the tokenization 
+repair models directly from the command line. Below are examples of how to use `trt`. 
+See `trt -h` for all options.
+
+```bash
+# print version
+trt -v
+
+# list available models
+trt -l
+
+# by default trt tries to read stdin, repairs the input it got line by line 
+# and prints the repaired lines back out
+# therefore, you can for example use trt with pipes
+echo "splitthissentenceforme" | trt
+cat "path/to/input/file.txt" | trt > output.txt
+
+# you can also explicitly pass a path to a text file you want to repair
+trt -f path/to/input/file.txt
+# and an optional output file path where the repaired lines are saved
+trt -f path/to/input/file.txt -o output.txt
+
+# start an interactive tokenization repair session
+# where your input will be repaired and printed back out
+trt -i
+
+### Pass the following flags to the trt command to customize its behaviour
+-m <model_name> # use a different tokenization repair model than the default one 
+-c # force execution on CPU, by default a GPU is used if available
+-p # display a progress bar (always on when a file is repaired using -f)
+-b <batch_size> # specify a different batch size
+-u # do not sort the inputs before repairing
+-e <experiment_dir> # specify the path to an experiment directory to load the model from 
+                    # (equivalent to TokenizationRepairer.from_experiment(experiment_dir) in python API)
 ```
+
+> Note: Loading the tokenization repair model requires an initial startup time each time you 
+> invoke the `trt` command. CPU startup time is around 1s, GPU startup time around 3.5s, so for small 
+> inputs or files you should probably pass the `-c` flag to force CPU execution for best performance.
 
 ### Documentation
 

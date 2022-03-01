@@ -1,8 +1,10 @@
 import string
+import sys
+sys.path.append("..")
 
 import pytest
 
-from tests.conftest import randomly_delete_whitespaces, randomly_insert_whitespaces
+from conftest import randomly_delete_whitespaces, randomly_insert_whitespaces
 
 from trt.utils import tokenization_repair
 
