@@ -12,20 +12,22 @@ After that, train your model given a training configuration file using
 
 `python -m trt.train --config <path_to_config_file>`
 
-To check the options and the required format of the preprocessing and training configuration files, 
-see [trt/configs/data_preprocessing/base.yaml](../configs/data_preprocessing/base.yaml) and 
+To check the options and the required format of the preprocessing and training configuration files,
+see [trt/configs/data_preprocessing/base.yaml](../configs/data_preprocessing/base.yaml) and
 [trt/configs/train/base.yaml](../configs/train/base.yaml).
 
 ### Reproduce results
 
-To reproduce the results of this project read the following sections `Download data`, `Preprocess data` and `Model training`.
+To reproduce the results of this project read the following sections `Download data`, `Preprocess data`
+and `Model training`.
 
 #### Download data
 
-For our training data we used sequences from Wikipedia and Arxiv. We then created two versions of our training dataset, 
+For our training data we used sequences from Wikipedia and Arxiv. We then created two versions of our training dataset,
 one with spelling and OCR errors and one without.
 
 To download the dataset without spelling and OCR errors execute the following commands:
+
 ```bash
 # download raw text data as tar file and save it under data/raw
 wget -P data/raw https://tokenization.cs.uni-freiburg.de/training_mixed.txt.tar.gz
@@ -46,6 +48,7 @@ python utils/txt_to_jsonl.py \
 ```
 
 To download the dataset with spelling and OCR errors execute the following commands:
+
 ```bash
 # download raw text data as tar file and save it under data/raw
 wget -P data/raw https://tokenization.cs.uni-freiburg.de/training_mixed_ocr+spelling.txt.tar.gz
@@ -69,10 +72,10 @@ You are now ready to use the generated .jsonl files to preprocess the LMDB datas
 
 #### Preprocess data
 
-All data preprocessing config files can be found in 
+All data preprocessing config files can be found in
 [configs/data_preprocessing/tokenization_repair](configs/data_preprocessing/tokenization_repair).
 
-To preprocess the data use the following command and replace 
+To preprocess the data use the following command and replace
 `<path_to_config_file>` with the preprocessing config file you want:
 
 `python -m trt.preprocess_data --config <path_to_config_file>`
@@ -81,19 +84,20 @@ If you e.g. want to preprocess the Arxiv dataset with spelling and OCR errors fo
 
 `python -m trt.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_eo_arxiv_with_errors.yaml`
 
-Or if you e.g. want to preprocess the Arxiv dataset without spelling and OCR errors dataset for the NMT models then execute:
+Or if you e.g. want to preprocess the Arxiv dataset without spelling and OCR errors dataset for the NMT models then
+execute:
 
 `python -m trt.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_nmt_arxiv_no_errors.yaml`
 
-You will need to set environment variables for some configs to work, but you will get error messages when the 
-variables are not set.
+You will need to set environment variables for some configs to work, but you will get error messages when the variables
+are not set.
 
 #### Model training
 
-All training config files can be found in 
+All training config files can be found in
 `configs/train/tokenization_repair`.
 
-To train a model use the following command and replace 
+To train a model use the following command and replace
 `<path_to_config_file>` with the preprocessing config file you want:
 
 `python -m trt.train --config <path_to_config_file>`
@@ -108,25 +112,24 @@ Or if you e.g. want to train a NMT model then execute:
 
 > The training code only works for single or multi GPU training on a single node, so if you do want to train on
 > more than one node, for now you will need to rewrite the code to support it.
- 
-> Be aware that the models from the paper were trained on 8 Nvidia RTX 2080 Ti GPUs for 4 epochs, 
-> so if you do not have similar compute resources available you might not be able to exactly reproduce the 
+
+> Be aware that the models from the paper were trained on 8 Nvidia RTX 2080 Ti GPUs for 3 epochs,
+> so if you do not have similar compute resources available you might not be able to exactly reproduce the
 > results from the paper.
 
-You will need to set environment variables for some configs to work, but you will get error messages when 
-the variables are not set.
+You will need to set environment variables for some configs to work, but you will get error messages when the variables
+are not set.
 
-Instead of setting the environment variables, you can of course also copy the training config file 
-and overwrite the values directly.
+Instead of setting the environment variables, you can of course also copy the training config file and overwrite the
+values directly.
 
-TODO: finish the table with env variables set for different models from the paper
+| Env variable      | eo_large_arxiv_with_errors | eo_medium_arxiv_with_errors | eo_small_arxiv_with_errors | 
+|-------------------|----------------------------|-----------------------------|----------------------------|
+| MODEL_NAME        | eo_large_arxiv_with_errors | eo_medium_arxiv_with_errors | eo_small_arxiv_with_errors |
+| LMDB_PATH         | <path_to_lmdb>             | <path_to_lmdb>              | <path_to_lmdb>             |
+| BATCH_MAX_TOKENS* | 8192                       | 8192                        | 8192                       |
+| NUM_EPOCHS        | 3                          | 3                           | 3                          |
+| NUM_LAYERS        | 12                         | 6                           | 3                          |
 
-| Env variable      | eo_large_arxiv_with_errors | 
-|-------------------|----------------------------|
-| LMDB_PATH         | <path_to_lmdb>             |
-| BATCH_MAX_TOKENS* | 8192                       |
-| NUM_EPOCHS        | 4                          | 
-| NUM_LAYERS        | 12                         |
-
-*The number of tokens per batch is set per training process / GPU, so if you use a different number of 
-GPUs than 8, adjust this setting accordingly to keep the overall tokens per batch about the same.
+*The number of tokens per batch is set per training process / GPU, so if you use a different number of GPUs than 8,
+adjust this setting accordingly to keep the overall tokens per batch about the same.
