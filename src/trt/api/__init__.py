@@ -84,6 +84,8 @@ class TokenizationRepairer:
         best_checkpoint = io.load_checkpoint(best_checkpoint_path)
         self.model.load_state_dict(best_checkpoint["model_state_dict"])
         self.model.eval()
+        for param in self.model.parameters():
+            param.requires_grad = False
 
         # set default inference kwargs
         self.inference_kwargs = {
@@ -178,7 +180,6 @@ class TokenizationRepairer:
         pbar.close()
         return inference_results
 
-    @torch.inference_mode()
     def repair_text(
             self,
             inputs: StringInputOutput,
@@ -209,7 +210,6 @@ class TokenizationRepairer:
         ]
         return outputs[0] if input_is_string else outputs
 
-    @torch.inference_mode()
     def repair_file(
             self,
             input_file_path: str,

@@ -132,26 +132,15 @@ def train_one_epoch(model: DDP,
         optimizer.zero_grad()
 
         start_forward = time.perf_counter()
-        if mixed_prec_scaler is not None:
-            # mixed precision training (FP16 and FP32)
-            with amp.autocast():
-                output, loss_dict = model(*inputs)
-                end_forward = time.perf_counter()
-                loss = criterion(output, labels)
-                loss = loss + sum(loss_dict.values())
-
-            mixed_prec_scaler.scale(loss).backward()
-            mixed_prec_scaler.step(optimizer)
-            mixed_prec_scaler.update()
-        else:
-            # standard full precision training (FP32)
+        with amp.autocast(enabled=mixed_prec_scaler.is_enabled()):
             output, loss_dict = model(*inputs)
             end_forward = time.perf_counter()
             loss = criterion(output, labels)
             loss = loss + sum(loss_dict.values())
 
-            loss.backward()
-            optimizer.step()
+        mixed_prec_scaler.scale(loss).backward()
+        mixed_prec_scaler.step(optimizer)
+        mixed_prec_scaler.update()
 
         if rank == 0:
             mean_loss.add(loss.detach())
@@ -402,7 +391,7 @@ def train(rank: int,
                                                             optimizer=optimizer) \
         if cfg.train.lr_scheduler is not None else None
 
-    mixed_prec_scaler = amp.GradScaler() if cfg.train.mixed_precision else None
+    mixed_prec_scaler = amp.GradScaler(enabled=cfg.train.mixed_precision)
 
     summary_writer = SummaryWriter(log_dir=directories["tensorboard"])
 
@@ -426,7 +415,7 @@ def train(rank: int,
         optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         if lr_scheduler is not None and checkpoint.get("lr_scheduler_state_dict") is not None:
             lr_scheduler.load_state_dict(checkpoint["lr_scheduler_state_dict"])
-        if mixed_prec_scaler is not None and checkpoint.get("grad_scaler_state_dict") is not None:
+        if checkpoint.get("grad_scaler_state_dict") is not None:
             mixed_prec_scaler.load_state_dict(checkpoint["grad_scaler_state_dict"])
 
         step = checkpoint["step"]

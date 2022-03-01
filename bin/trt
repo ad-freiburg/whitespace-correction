@@ -4,6 +4,9 @@ import argparse
 import sys
 import logging
 
+import torch.backends.cudnn
+from torch.backends import cudnn
+
 import trt
 from trt import get_available_models, TokenizationRepairer
 
@@ -103,6 +106,9 @@ def run(args: argparse.Namespace) -> None:
         model_str = "\n".join(f"- {model.name}: {model.description}" for model in get_available_models())
         print(f"Available models:\n{model_str}")
         return
+
+    torch.backends.cudnn.benchmark = True
+    torch.use_deterministic_algorithms(False)
 
     tok_rep = TokenizationRepairer.from_pretrained(model=args.model, use_gpu=not args.cpu)
 
