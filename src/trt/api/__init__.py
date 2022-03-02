@@ -4,10 +4,11 @@ import pickle
 import pprint
 from typing import Union, List, Optional
 
+import numpy as np
 import torch
 from tqdm import tqdm
 
-from trt.api.utils import download_model, get_cpu_info, get_gpu_info
+from trt.api.utils import download_model, get_cpu_info, get_gpu_info, split
 from trt.model import transformer
 from trt.utils import common, config, io, inference, nlp, tokenization_repair
 
@@ -23,6 +24,12 @@ def get_available_models() -> List[ModelInfo]:
         ModelInfo(
             name="eo_arxiv_with_errors",
             description="best overall model, use this for text that might have OCR or spelling errors (default)"
+        ),
+        ModelInfo(
+            name="eo_small_arxiv_with_errors",
+            description="smallest and fastest, but also the least accurate model, "
+                        "use this when you want to repair text with few tokenization errors and "
+                        "little to no OCR or spelling errors fast"
         )
     ]
 
@@ -35,7 +42,8 @@ class TokenizationRepairer:
     def from_pretrained(
             model: str = get_available_models()[0].name,
             use_gpu: bool = True,
-            cache_dir: Optional[str] = None
+            cache_dir: Optional[str] = None,
+            force_download: bool = False
     ) -> "TokenizationRepairer":
         assert any(model == m.name for m in get_available_models()), \
             f"model {model} does not match any of the available models:\n{pprint.pformat(get_available_models())}"
@@ -47,7 +55,7 @@ class TokenizationRepairer:
             )
 
         logger = common.get_logger("DOWNLOAD")
-        model_dir = download_model(model, cache_dir, logger)
+        model_dir = download_model(model, cache_dir, force_download, logger)
 
         return TokenizationRepairer(model_dir, use_gpu)
 
@@ -126,6 +134,31 @@ class TokenizationRepairer:
         self.max_length = self.model.encoder.config.max_num_embeddings - 2  # - 2 because of bos and eos tokens
         self.overlap = max(self.max_length // 2, 1)
 
+    def _merge_inference_results(
+            self,
+            inference_results: List[inference.SequenceClassificationInferenceResult],
+            start_positions: List[int]
+    ) -> inference.InferenceResult:
+        assert (
+                len(inference_results) > 0
+                and len(inference_results) == len(start_positions)
+                and sorted(start_positions) == start_positions
+        )
+        if len(inference_results) == 1:
+            return inference_results[0]
+
+        num_merged_predictions = 2 + start_positions[-1] + self.max_length
+        merged_logits = np.zeros((num_merged_predictions, len(inference_results[0].logits[0])), dtype=float)
+        num_logit_updates = np.zeros((num_merged_predictions, 1), dtype=int)
+        for start_pos, ir in zip(start_positions, inference_results):
+            merged_logits[start_pos + 1:start_pos + 1 + self.max_length] += ir.logits[1:-1]
+            num_logit_updates[start_pos + 1:start_pos + 1 + self.max_length] += 1
+        num_logit_updates[0] = 1  # bos token updates (to avoid dividing by zero)
+        num_logit_updates[-1] = 1  # eos token updates (to avoid dividing by zero)
+        merged_logits /= num_logit_updates
+        merged_predictions = np.argmax(merged_logits, axis=-1)
+        return inference.SequenceClassificationInferenceResult(merged_predictions.tolist(), merged_logits.tolist())
+
     @torch.inference_mode()
     def _repair_text_raw(
             self,
@@ -149,20 +182,36 @@ class TokenizationRepairer:
             unit="char"
         )
 
-        inference_results: List[inference.InferenceResult] = [None] * len(inputs)  # type: ignore
+        all_inference_results: List[inference.InferenceResult] = [None] * len(inputs)  # type: ignore
         for i, batch_idx in enumerate(pbar):
-            batch_input_indices = []
+            batch_indices_and_lengths = input_indices_and_lengths[batch_idx: batch_idx + batch_size]
+            batch = []
+            batch_group_lengths = []
+            batch_start_positions = []
             batch_length = 0
-            for idx, length in input_indices_and_lengths[batch_idx: batch_idx + batch_size]:
-                batch_input_indices.append(idx)
+            for idx, length in batch_indices_and_lengths:
                 batch_length += length
 
+                group_length = 1
+                batch_start_positions.append(0)
+                batch.append(inputs[idx][:self.max_length])
+
+                # split sequence into multiple sequences if it is longer than the specified max length
+                if length > self.max_length:
+                    start_pos = 0
+                    while start_pos + self.max_length < length:
+                        start_pos = min(start_pos + self.overlap, length - self.max_length)
+                        batch_start_positions.append(start_pos)
+                        batch.append(inputs[idx][start_pos:start_pos + self.max_length])
+                        group_length += 1
+
+                batch_group_lengths.append(group_length)
+
             pbar.set_description(
-                f"[Batch {i + 1}] Repairing tokenization of {len(batch_input_indices):,} sequences "
+                f"[Batch {i + 1}] Repairing tokenization of {len(batch_indices_and_lengths):,} sequences "
                 f"with {batch_length:,} characters in total"
             )
 
-            batch = [inputs[idx] for idx in batch_input_indices]
             kwargs = {
                 "no_spaces": [" " not in ipt for ipt in batch]
             }
@@ -172,13 +221,17 @@ class TokenizationRepairer:
                 batch,
                 **kwargs
             )
-            for idx, ir in zip(batch_input_indices, batch_inference_results):
-                inference_results[idx] = ir
+            for (idx, _), inference_results, start_positions in zip(
+                    batch_indices_and_lengths,
+                    split(batch_inference_results, batch_group_lengths),
+                    split(batch_start_positions, batch_group_lengths)
+            ):
+                all_inference_results[idx] = self._merge_inference_results(inference_results, start_positions)
 
             pbar.update(batch_length)
 
         pbar.close()
-        return inference_results
+        return all_inference_results
 
     def repair_text(
             self,

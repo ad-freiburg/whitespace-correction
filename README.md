@@ -63,15 +63,19 @@ trt -l
 echo "splitthissentenceforme" | trt
 cat "path/to/input/file.txt" | trt > output.txt
 
-# you can also explicitly pass a path to a text file you want to repair
+# repair a string using
+trt -r "splitthissentenceforme"
+
+# repair a text file line by line and print the repaired lines
 trt -f path/to/input/file.txt
-# and an optional output file path where the repaired lines are saved
+# optionally specify an output file path where the repaired lines are saved
 trt -f path/to/input/file.txt -o output.txt
 
 # start an interactive tokenization repair session
 # where your input will be repaired and printed back out
 trt -i
 
+### OPTIONS
 ### Pass the following flags to the trt command to customize its behaviour
 -m <model_name> # use a different tokenization repair model than the default one 
 -c # force execution on CPU, by default a GPU is used if available
@@ -80,6 +84,7 @@ trt -i
 -u # do not sort the inputs before repairing
 -e <experiment_dir> # specify the path to an experiment directory to load the model from 
                     # (equivalent to TokenizationRepairer.from_experiment(experiment_dir) in python API)
+--force-download # force download of the tokenization repair model even if it was already downloaded
 ```
 
 > Note: When first using `trt` with a pretrained model, the model needs to be downloaded, so depending on 

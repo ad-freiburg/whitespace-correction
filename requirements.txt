@@ -1,5 +1,5 @@
 # Dependencies of the trt library (Usage in brackets)
-# These are more or less the same dependenices that get installed during python setup.py install
+# These are more or less the same dependenices that get installed during pip install .[train]
 # (expect for mypy, flake8 and pytest)
 
 # modeling and math

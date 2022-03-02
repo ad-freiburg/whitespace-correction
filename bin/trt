@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
 import argparse
-import sys
 import logging
+import sys
 
+import torch
 import torch.backends.cudnn
-from torch.backends import cudnn
 
 import trt
 from trt import get_available_models, TokenizationRepairer
@@ -24,6 +24,13 @@ def parse_args() -> argparse.Namespace:
         help="Name of the model to use for tokenization repair"
     )
     input_group = parser.add_mutually_exclusive_group()
+    input_group.add_argument(
+        "-r",
+        "--repair",
+        type=str,
+        default=None,
+        help="Text to repair"
+    )
     input_group.add_argument(
         "-f",
         "--file",
@@ -95,12 +102,17 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Print the version of the trt library"
     )
+    parser.add_argument(
+        "--force-download",
+        action="store_true",
+        help="Download the model again even if it already was downloaded"
+    )
     return parser.parse_args()
 
 
 def run(args: argparse.Namespace) -> None:
     if args.version:
-        print(f"trt version={trt.__version__}")
+        print(f"trt version {trt.__version__}")
         return
     if args.list:
         model_str = "\n".join(f"- {model.name}: {model.description}" for model in get_available_models())
@@ -110,9 +122,15 @@ def run(args: argparse.Namespace) -> None:
     torch.backends.cudnn.benchmark = True
     torch.use_deterministic_algorithms(False)
 
-    tok_rep = TokenizationRepairer.from_pretrained(model=args.model, use_gpu=not args.cpu)
+    tok_rep = TokenizationRepairer.from_pretrained(
+        model=args.model,
+        use_gpu=not args.cpu,
+        force_download=args.force_download
+    )
 
-    if args.file is not None:
+    if args.repair is not None:
+        print(tok_rep.repair_text(args.repair))
+    elif args.file is not None:
         repaired_lines = tok_rep.repair_file(
             input_file_path=args.file,
             output_file_path=args.out_path,
@@ -125,8 +143,8 @@ def run(args: argparse.Namespace) -> None:
     elif args.interactive:
         while True:
             try:
-                input_line = input()
-                print(tok_rep.repair_text(input_line))
+                line = input()
+                print(tok_rep.repair_text(line))
             except KeyboardInterrupt:
                 return
     else:
