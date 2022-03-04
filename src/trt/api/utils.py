@@ -11,9 +11,11 @@ import requests
 import torch
 from tqdm import tqdm
 
+_BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
 _NAME_TO_URL = {
-    "eo_arxiv_with_errors": "https://tokenization.cs.uni-freiburg.de/transformer/eo_arxiv_with_errors.zip",
-    "eo_small_arxiv_with_errors": "https://tokenization.cs.uni-freiburg.de/transformer/eo_small_arxiv_with_errors.zip",
+    "eo_arxiv_with_errors": f"{_BASE_URL}/eo_arxiv_with_errors.zip",
+    "eo_small_arxiv_with_errors": f"{_BASE_URL}/eo_small_arxiv_with_errors.zip",
+    "eo_medium_arxiv_with_errors": f"{_BASE_URL}/eo_medium_arxiv_with_errors.zip",
 }
 
 

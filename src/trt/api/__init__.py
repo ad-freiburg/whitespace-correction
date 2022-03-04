@@ -26,6 +26,12 @@ def get_available_models() -> List[ModelInfo]:
             description="best overall model, use this for text that might have OCR or spelling errors (default)"
         ),
         ModelInfo(
+            name="eo_medium_arxiv_with_errors",
+            description="compromise between eo_arxiv_with_errors and eo_small_arxiv_with_errors, "
+                        "faster than eo_arxiv_with_errors but less accurate, "
+                        "slower than eo_small_arxiv_with_errors but more accurate"
+        ),
+        ModelInfo(
             name="eo_small_arxiv_with_errors",
             description="smallest and fastest, but also the least accurate model, "
                         "use this when you want to repair text with few tokenization errors and "
