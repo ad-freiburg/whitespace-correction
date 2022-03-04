@@ -81,8 +81,8 @@ class ClassificationHead(Head):
 
 
 class SequenceClassificationHead(ClassificationHead):
-    def __init__(self, model_dim: int, num_classes: int):
-        super().__init__(model_dim=model_dim, num_classes=num_classes, num_layers=1)
+    def __init__(self, model_dim: int, num_classes: int, num_layers: int = 1):
+        super().__init__(model_dim=model_dim, num_classes=num_classes, num_layers=num_layers)
 
     def forward(self, encodings: torch.Tensor) -> torch.Tensor:
         """
@@ -129,11 +129,13 @@ def get_head_from_config(config: HeadConfig, model_dim: int) -> Head:
 
     if config.type == "classification":
         head = ClassificationHead(model_dim=model_dim,
-                                  num_classes=kwargs["num_classes"])
+                                  num_classes=kwargs["num_classes"],
+                                  num_layers=kwargs.get("num_layers", 1))
 
     elif config.type == "sequence_classification":
         head = SequenceClassificationHead(model_dim=model_dim,
-                                          num_classes=kwargs["num_classes"])
+                                          num_classes=kwargs["num_classes"],
+                                          num_layers=kwargs.get("num_layers", 1))
 
     else:
         raise ValueError(f"Unknown head type {config.type}")

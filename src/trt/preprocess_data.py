@@ -144,7 +144,7 @@ def write_lmdb(output_dir: str,
     queue: mp.Queue = mp.Queue()
     processes = []
     num_finished = 0
-    num_processes = int(os.environ.get("NUM_PROCESSES", min(mp.cpu_count(), 8, len(files))))
+    num_processes = int(os.environ.get("NUM_PROCESSES", min(len(os.sched_getaffinity(0)), 8, len(files))))
     batch_size = len(files) // num_processes
     for i in range(num_processes):
         lower_idx = i * batch_size

@@ -525,8 +525,8 @@ def get_preprocessing_fn(preprocessing_method: str, **kwargs: Any) -> PREPROCESS
     elif preprocessing_method == "edit_distance":
         return _edit_distance(**kwargs)
 
-    elif preprocessing_method == "masked_language_modeling":
-        return _masked_language_modeling(**kwargs)
+    elif preprocessing_method == "character_masked_language_modeling":
+        return _character_masked_language_modeling(**kwargs)
 
     elif preprocessing_method == "join_sequences":
         return _join_sequences(**kwargs)
@@ -613,39 +613,53 @@ def _switch(functions: List[Dict] = None,
     return _preprocessing_fn
 
 
-def _masked_language_modeling(tokenizer: str = "",
-                              p: float = 0.15,
-                              seed: int = 22) -> PREPROCESSING_FN:
+def _character_masked_language_modeling(word_p: float = 0.15,
+                                        full_word_p: float = 0.5,
+                                        seed: int = 22) -> PREPROCESSING_FN:
     """
 
     Preprocessing method for masked language modeling.
 
-    :param tokenizer: which tokenizer to use
-    :param p: probability of masking a token
+    :param word_p: probability of masking a word (split by whitespace)
+    :param full_word_p: probability of masking a word completely
+            (otherwise uniform(0, len(word) - 1) chars of the word will be masked)
+    :param seed: random seed
     """
-    tok = toklib.load_tokenizer(tokenizer)
-    rand = np.random.RandomState(seed=seed)
+    tok = toklib.load_tokenizer("char")
+    unk_token_id = tok.token_to_id(constants.UNK)
+    rand = np.random.default_rng(seed)
 
     def _preprocessing_fn(seq: PREPROCESSING_INPUT_OUTPUT) -> PREPROCESSING_INPUT_OUTPUT:
         def _mlm(item: Dict[str, Any]) -> Dict[str, Any]:
             assert "sequence" in item
             sequence = nlp.clean_sequence(item["sequence"])
 
-            mask_token_id = tok.token_to_id(constants.MASK)
-            token_ids = tok.encode(sequence, pair=None).ids[1:-1]
             labels = [-1]
-            for i in range(len(token_ids)):
-                token_id = token_ids[i]
-
-                if rand.rand() < p:
-                    token_ids[i] = mask_token_id
-                    labels.append(token_id)
-
+            masked_words = []
+            for word in sequence.split():
+                if rand.random() < word_p:
+                    if rand.random() < full_word_p:
+                        # mask the full word
+                        masked_words.append(constants.MASK * len(word))
+                        labels.extend([tok.token_to_id(char) or unk_token_id for char in word])
+                    else:
+                        masked_chars = list(word)
+                        mask_indices = rand.permutation(len(masked_chars))[:rand.integers(1, max(2, len(masked_chars)))]
+                        masked_labels = [-1] * len(masked_chars)
+                        for idx in mask_indices:
+                            masked_labels[idx] = tok.token_to_id(masked_chars[idx]) or unk_token_id
+                            masked_chars[idx] = constants.MASK
+                        masked_words.append("".join(masked_chars))
+                        labels.extend(masked_labels)
                 else:
-                    labels.append(-1)
-            labels.append(-1)
+                    masked_words.append(word)
+                    labels.extend([-1] * len(word))
 
-            item["sequence"] = tok.decode(token_ids, skip_special_tokens=False)
+                labels.append(-1)   # for the whitespace after each word (eos token for last word)
+
+            sequence = " ".join(masked_words)
+
+            item["sequence"] = sequence
             item["labels"] = labels
             item.pop("target_sequence", None)
 
