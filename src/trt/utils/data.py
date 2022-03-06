@@ -634,9 +634,10 @@ def _character_masked_language_modeling(word_p: float = 0.15,
             assert "sequence" in item
             sequence = nlp.clean_sequence(item["sequence"])
 
+            words = sequence.split()
             labels = [-1]
             masked_words = []
-            for word in sequence.split():
+            for i, word in enumerate(words):
                 if rand.random() < word_p:
                     if rand.random() < full_word_p:
                         # mask the full word
@@ -655,8 +656,10 @@ def _character_masked_language_modeling(word_p: float = 0.15,
                     masked_words.append(word)
                     labels.extend([-1] * len(word))
 
-                labels.append(-1)   # for the whitespace after each word (eos token for last word)
+                if i < len(words) - 1:
+                    labels.append(-1)   # for the whitespace after each word
 
+            labels.append(-1)
             sequence = " ".join(masked_words)
 
             item["sequence"] = sequence

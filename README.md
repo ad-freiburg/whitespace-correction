@@ -78,10 +78,11 @@ trt -i
 ### OPTIONS
 ### Pass the following flags to the trt command to customize its behaviour
 -m <model_name> # use a different tokenization repair model than the default one 
--c # force execution on CPU, by default a GPU is used if available
--p # display a progress bar (always on when a file is repaired using -f)
+--cpu # force execution on CPU, by default a GPU is used if available
+--progress # display a progress bar (always on when a file is repaired using -f)
 -b <batch_size> # specify a different batch size
 -u # do not sort the inputs before repairing
+-p # switch on pipe mode (useful but no needed when using Linux pipes)
 -e <experiment_dir> # specify the path to an experiment directory to load the model from 
                     # (equivalent to TokenizationRepairer.from_experiment(experiment_dir) in python API)
 --force-download # force download of the tokenization repair model even if it was already downloaded

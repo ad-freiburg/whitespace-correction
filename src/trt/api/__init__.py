@@ -2,7 +2,7 @@ import collections
 import os
 import pickle
 import pprint
-from typing import Union, List, Optional
+from typing import Union, List, Optional, Iterator, Iterable
 
 import numpy as np
 import torch
@@ -268,6 +268,15 @@ class TokenizationRepairer:
             for ipt, ir in zip(inputs, inference_results)
         ]
         return outputs[0] if input_is_string else outputs
+
+    def repair_text_iter(
+            self,
+            input_iterator: Iterable[StringInputOutput],
+            batch_size: int = 16,
+            sort_by_length: bool = True
+    ) -> Iterable[str]:
+        for inputs in input_iterator:
+            yield self.repair_text(inputs, batch_size, sort_by_length)
 
     def repair_file(
             self,

@@ -15,13 +15,15 @@ train:
 
   optimizer:
     type: "adamw"
-    learning_rate: ${LR:0.0001}
+    learning_rate: ${LR:0.00001}
     weight_decay: 0.01
 
   lr_scheduler:
-    type: "cosine_with_warmup"
+    type: "multi_step_with_warmup"
     arguments:
       warmup_steps: ${WARMUP_STEPS:16000}
+      steps: [0.75, 0.95]
+      factor: 0.1
 
   loss:
     type: "seq2seq_cross_entropy"
@@ -45,12 +47,10 @@ model:
   name: "${MODEL_NAME}"
   type: "encoder_with_head"
 
-  pretrained: ${PRETRAINED:null}
-
   encoder:
     tokenizer: "char"
 
-    pretrained: ${ENCODER_PRETRAINED:null}
+    pretrained: ${ENCODER_PRETRAINED}
 
     embedding_dim: ${MODEL_DIM:512}
     max_num_embeddings: ${MAX_SEQ_LENGTH:512}
@@ -69,6 +69,5 @@ model:
     type: "sequence_classification"
     arguments:
       model_dim: ${MODEL_DIM:512}
-      num_layers: ${HEAD_NUM_LAYERS:1}
+      num_layers: ${HEAD_NUM_LAYERS:3}
       num_classes: 3
-

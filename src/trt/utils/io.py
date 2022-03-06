@@ -65,45 +65,34 @@ def load_checkpoint(path: str) -> Dict[str, Any]:
 
 def load_state_dict(module: nn.Module,
                     state_dict: Dict[str, Any],
-                    match_suffixes: bool = False) -> None:
+                    prefix: Optional[str] = None) -> None:
     """
 
     :param module:pytorch module
     :param state_dict: state_dict to load into module
-    :param match_suffixes: if True keys of module state dict and given state dict do not need to match exactly, but
-        are matched using suffixes
+    :param prefix: if not None, only params with this prefix will be loaded (e.g. useful for loading only encoder or
+    decoder weights of a model)
     """
     global logger
 
     current_state_dict = module.state_dict()
 
-    if match_suffixes:
-        matched_suffixes = set()
-        for current_k in current_state_dict.keys():
-            for new_k in state_dict.keys():
-                if (current_k, new_k) in matched_suffixes:
-                    continue
-                stripped_new_k = new_k.replace("encoder.", "").replace("decoder.", "")
-                if current_k.endswith(stripped_new_k):
-                    current_state_dict[current_k] = state_dict[new_k]
-                    matched_suffixes.add((current_k, new_k))
-                    break
-        logger.info(f"Matched suffixes: {matched_suffixes}")
+    if prefix is not None:
+        state_dict = {k[len(prefix):]: v for k, v in state_dict.items() if k.startswith(prefix)}
 
-    else:
-        current_keys = set(current_state_dict.keys())
-        state_dict_keys = set(state_dict.keys())
-        if len(current_keys.difference(state_dict_keys)) > 0:
-            # raise ValueError
-            logger.warning(f"Found keys in module that are not in state_dict: "
-                           f"{current_keys.difference(state_dict_keys)}")
+    current_keys = set(current_state_dict)
+    state_dict_keys = set(state_dict)
+    if len(current_keys.difference(state_dict_keys)) > 0:
+        # raise ValueError
+        logger.warning(f"Found keys in module that are not in state_dict: "
+                       f"{current_keys.difference(state_dict_keys)}")
 
-        if len(state_dict_keys.difference(current_keys)) > 0:
-            logger.warning(f"Found keys in state_dict that are not in module:"
-                           f" {state_dict_keys.difference(current_keys)}. Skipping them.")
-            state_dict = {k: v for k, v in state_dict.items() if k in current_keys}
+    if len(state_dict_keys.difference(current_keys)) > 0:
+        logger.warning(f"Found keys in state_dict that are not in module:"
+                       f" {state_dict_keys.difference(current_keys)}. Skipping them.")
+        state_dict = {k: v for k, v in state_dict.items() if k in current_keys}
 
-        current_state_dict.update(state_dict)
+    current_state_dict.update(state_dict)
 
     module.load_state_dict(current_state_dict)
 

@@ -79,7 +79,7 @@ class PytorchDecoder(BaseDecoder):
             checkpoint = io.load_checkpoint(self.config.pretrained)
             io.load_state_dict(module=self,
                                state_dict=checkpoint["model_state_dict"],
-                               match_suffixes=True)
+                               prefix="decoder.")
             global logger
             logger.info(f"Successfully loaded pretrained weights into {self.__class__.__name__} "
                         f"from {self.config.pretrained}")

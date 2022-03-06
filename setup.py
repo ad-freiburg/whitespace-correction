@@ -3,9 +3,8 @@ from setuptools import setup, find_packages
 with open("README.md", "r", encoding="utf8") as rdm:
     long_description = rdm.read()
 
-with open("src/trt/version.py", "r") as vf:
+with open("src/trt/version.py", "r", encoding="utf8") as vf:
     version = vf.readlines()[-1].strip().split()[-1].strip("\"'")
-    print(version)
 
 setup(
     name="trt",
