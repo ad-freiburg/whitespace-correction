@@ -5,11 +5,12 @@ import platform
 import re
 import shutil
 import zipfile
-from typing import List, Union
+from typing import List, Union, Optional
 
 import numpy as np
 import requests
 import torch
+from tabulate import tabulate
 from tqdm import tqdm
 
 _BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
@@ -99,11 +100,15 @@ def get_cpu_info() -> str:
     return platform.processor()
 
 
-def get_gpu_info(device: Union[str, int]) -> str:
+def get_gpu_info(device: Union[torch.device, str, int]) -> str:
     device_props = torch.cuda.get_device_properties(device)
     return f"{device_props.name} ({device_props.total_memory // 1024 // 1024:,}MiB memory, " \
            f"{device_props.major}.{device_props.minor} compute capability, " \
            f"{device_props.multi_processor_count} multiprocessors)"
+
+
+def get_device_info(device: torch.device) -> str:
+    return get_gpu_info(device) if device.type == "cuda" else get_cpu_info()
 
 
 def split(items: List, lengths: List[int]) -> List[List]:
@@ -114,3 +119,49 @@ def split(items: List, lengths: List[int]) -> List[List]:
         split_items.append(items[offset:offset + length])
         offset += length
     return split_items
+
+
+def generate_report(
+        task: str,
+        model: str,
+        inputs: List[str],
+        runtime: float,
+        batch_size: int,
+        sort_by_length: bool,
+        device: torch.device,
+        file_path: Optional[str] = None
+) -> Optional[str]:
+    input_size = len(inputs)
+    input_size_chars = sum(len(ipt) for ipt in inputs)
+    report = tabulate(
+        [
+            [
+                task,
+                model,
+                f"{input_size:,} sequences, {input_size_chars:,} chars",
+                runtime,
+                input_size / runtime,
+                input_size_chars / runtime,
+                batch_size,
+                "yes" if sort_by_length else "no",
+                f"{torch.cuda.get_device_name(device)}, {get_cpu_info()}" if device.type == "cuda" else get_cpu_info()
+            ]
+        ],
+        headers=[
+            "Task", "Model", "Input size", "Runtime in seconds", "Seq/s", "Char/s", "Batch size", "Sorted", "Device"
+        ],
+        floatfmt=[None, None, None, ".3f", ".2f", ".2f", None, None, None, None],
+        tablefmt="pipe"
+    )
+    if file_path is not None:
+        if os.path.dirname(file_path):
+            os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        exists = os.path.exists(file_path)
+        with open(file_path, "a" if exists else "w", encoding="utf8") as of:
+            if exists:
+                of.write(report.splitlines()[-1] + "\n")
+            else:
+                of.write(report + "\n")
+        return None
+    else:
+        return report

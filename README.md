@@ -90,10 +90,11 @@ trt --server localhost:12345
 --progress # display a progress bar (always on when a file is repaired using -f)
 -b <batch_size> # specify a different batch size
 -u # do not sort the inputs before repairing
--p # switch on pipe mode (useful but no needed when using Linux pipes)
+-p # switch on pipe mode (useful but not needed when using Linux pipes)
 -e <experiment_dir> # specify the path to an experiment directory to load the model from 
                     # (equivalent to TokenizationRepairer.from_experiment(experiment_dir) in python API)
 --force-download # force download of the tokenization repair model even if it was already downloaded
+--report <file_path> # save a report on the runtime of the model in form of a markdown table in a file
 ```
 
 > Note: When first using `trt` with a pretrained model, the model needs to be downloaded, so depending on 

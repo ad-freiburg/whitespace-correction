@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from trt.api.utils import download_model, get_cpu_info, get_gpu_info, split
+from trt.api.utils import download_model, get_device_info, split
 from trt.model import transformer
 from trt.utils import common, config, io, inference, nlp, tokenization_repair
 
@@ -73,26 +73,26 @@ class TokenizationRepairer:
     ) -> "TokenizationRepairer":
         return TokenizationRepairer(experiment_dir, device)
 
+    @property
+    def model_name(self) -> str:
+        return self.cfg.model.name
+
     def __init__(self,
                  model_dir: str,
                  device: Union[str, int]) -> None:
         self.logger = common.get_logger("TOKENIZATION_REPAIR")
 
-        if device != "cpu":
-            if not torch.cuda.is_available():
-                self.logger.info(f"could not find a GPU, using CPU {get_cpu_info()} as fallback option")
-                device = "cpu"
-            else:
-                self.logger.info(f"running tokenization repair on GPU {get_gpu_info(device)}")
-        else:
-            self.logger.info(f"running tokenization repair on CPU {get_cpu_info()}")
+        if device != "cpu" and not torch.cuda.is_available():
+            self.logger.info(f"could not find a GPU, using CPU as fallback option")
+            device = "cpu"
 
         self.device = torch.device(device)
+        self.logger.info(f"running tokenization repair on device {get_device_info(self.device)}")
 
-        cfg = config.Config.from_yaml(os.path.join(model_dir, "config.yaml"))
-        self.logger.debug(f"loaded model config:\n{cfg}")
+        self.cfg = config.Config.from_yaml(os.path.join(model_dir, "config.yaml"))
+        self.logger.debug(f"loaded model config:\n{self.cfg}")
 
-        self.model = transformer.get_model_from_config(cfg.model, self.device)
+        self.model = transformer.get_model_from_config(self.cfg.model, self.device)
         best_checkpoint_path = io.glob_safe(os.path.join(model_dir, "checkpoints", "*-checkpoint-best.pt"))[0]
         best_checkpoint = io.load_checkpoint(best_checkpoint_path)
         self.model.load_state_dict(best_checkpoint["model_state_dict"])
