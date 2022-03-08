@@ -75,6 +75,14 @@ trt -f path/to/input/file.txt -o output.txt
 # where your input will be repaired and printed back out
 trt -i
 
+# start a tokenization repair server on <host>:<port> with the following endpoints:
+### <host>:<port>/models [GET] --> list available models as json 
+### <host>:<port>/repair_text?text=texttorepair [GET] --> repaired text as json
+### <host>:<port>/repair_file [POST] --> repaired file as json
+### To specify which model to use, you can use the model query parameter 
+### (e.g. <host>:<port>/repair_file?model=eo_small_arxiv_with_errors), default model is eo_arxiv_with_errors
+trt --server localhost:12345
+
 ### OPTIONS
 ### Pass the following flags to the trt command to customize its behaviour
 -m <model_name> # use a different tokenization repair model than the default one 
