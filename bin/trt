@@ -4,7 +4,6 @@ import argparse
 import logging
 import os
 import sys
-import time
 
 import torch
 import torch.backends.cudnn
@@ -115,21 +114,40 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Download the model again even if it already was downloaded"
     )
+    parser.add_argument(
+        "--server",
+        type=str,
+        default=None,
+        help="Run a tokenization repair server, specify host and port in the form <host>:<port>"
+    )
     return parser.parse_args()
 
 
 def run(args: argparse.Namespace) -> None:
-    if args.version:
-        print(f"trt version {trt.__version__}")
-        return
-    if args.list:
-        model_str = "\n".join(f"- {model.name}: {model.description}" for model in get_available_models())
-        print(f"Available models:\n{model_str}")
-        return
-
     torch.backends.cudnn.benchmark = True
     torch.set_num_threads(len(os.sched_getaffinity(0)))
     torch.use_deterministic_algorithms(False)
+
+    if args.version:
+        print(f"trt version {trt.__version__}")
+        return
+    elif args.list:
+        model_str = "\n".join(f"- {model.name}: {model.description}" for model in get_available_models())
+        print(f"Available models:\n{model_str}")
+        return
+    elif args.server is not None:
+        try:
+            host, port = args.server.split(":")
+            port = int(port)
+        except Exception:
+            raise RuntimeError(f"could not parse host and port from {args.server}")
+
+        from trt.api.server import run_flask_server
+        run_flask_server(host, port)
+        return
+
+    # disable logging here since we do not want that for our command line interface, but for the server above
+    logging.disable(logging.CRITICAL)
 
     if args.experiment:
         tok_rep = TokenizationRepairer.from_experiment(
@@ -193,6 +211,4 @@ def run(args: argparse.Namespace) -> None:
 
 
 if __name__ == "__main__":
-    # disable logging since we do not want that for our command line interface
-    logging.disable(logging.CRITICAL)
     run(parse_args())

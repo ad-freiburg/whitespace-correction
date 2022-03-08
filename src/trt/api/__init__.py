@@ -1,8 +1,9 @@
 import collections
+import math
 import os
 import pickle
 import pprint
-from typing import Union, List, Optional, Iterator, Iterable
+from typing import Union, List, Optional, Iterable
 
 import numpy as np
 import torch
@@ -47,7 +48,7 @@ class TokenizationRepairer:
     @staticmethod
     def from_pretrained(
             model: str = get_available_models()[0].name,
-            use_gpu: bool = True,
+            device: Union[str, int] = "cuda",
             cache_dir: Optional[str] = None,
             force_download: bool = False
     ) -> "TokenizationRepairer":
@@ -63,30 +64,28 @@ class TokenizationRepairer:
         logger = common.get_logger("DOWNLOAD")
         model_dir = download_model(model, cache_dir, force_download, logger)
 
-        return TokenizationRepairer(model_dir, use_gpu)
+        return TokenizationRepairer(model_dir, device)
 
     @staticmethod
     def from_experiment(
             experiment_dir: str,
-            use_gpu: bool = True
+            device: Union[str, int] = "cuda"
     ) -> "TokenizationRepairer":
-        return TokenizationRepairer(experiment_dir, use_gpu)
+        return TokenizationRepairer(experiment_dir, device)
 
     def __init__(self,
                  model_dir: str,
-                 use_gpu: bool) -> None:
+                 device: Union[str, int]) -> None:
         self.logger = common.get_logger("TOKENIZATION_REPAIR")
 
-        if use_gpu:
+        if device != "cpu":
             if not torch.cuda.is_available():
                 self.logger.info(f"could not find a GPU, using CPU {get_cpu_info()} as fallback option")
                 device = "cpu"
             else:
-                self.logger.info(f"running tokenization repair on GPU {get_gpu_info()}")
-                device = "cuda"
+                self.logger.info(f"running tokenization repair on GPU {get_gpu_info(device)}")
         else:
             self.logger.info(f"running tokenization repair on CPU {get_cpu_info()}")
-            device = "cpu"
 
         self.device = torch.device(device)
 
@@ -138,7 +137,8 @@ class TokenizationRepairer:
                               f"{thresholds_and_default_no_spaces}")
 
         self.max_length = self.model.encoder.config.max_num_embeddings - 2  # - 2 because of bos and eos tokens
-        self.overlap = max(self.max_length // 2, 1)
+        self.overlap = math.ceil(self.max_length / 2)
+        self.half_overlap_floor = 0  # to enable half_overlap_merging set this to math.floor(self.overlap / 2)
 
     def _merge_inference_results(
             self,
@@ -156,11 +156,19 @@ class TokenizationRepairer:
         num_merged_predictions = 2 + start_positions[-1] + self.max_length
         merged_logits = np.zeros((num_merged_predictions, len(inference_results[0].logits[0])), dtype=float)
         num_logit_updates = np.zeros((num_merged_predictions, 1), dtype=int)
-        for start_pos, ir in zip(start_positions, inference_results):
-            merged_logits[start_pos + 1:start_pos + 1 + self.max_length] += ir.logits[1:-1]
-            num_logit_updates[start_pos + 1:start_pos + 1 + self.max_length] += 1
+        for i, (start_pos, ir) in enumerate(zip(start_positions, inference_results)):
+            from_pos = start_pos + 1
+            if i > 0:
+                from_pos += self.half_overlap_floor
+            to_pos = start_pos + 1 + self.max_length
+            if i < len(inference_results) - 1:
+                to_pos -= self.half_overlap_floor
+            assert len(ir.logits) == self.max_length + 2
+            merged_logits[from_pos:to_pos] += ir.logits[from_pos - start_pos:to_pos - start_pos]
+            num_logit_updates[from_pos:to_pos] += 1
         num_logit_updates[0] = 1  # bos token updates (to avoid dividing by zero)
         num_logit_updates[-1] = 1  # eos token updates (to avoid dividing by zero)
+        assert np.all(num_logit_updates > 0)  # make sure every position got an update
         merged_logits /= num_logit_updates
         merged_predictions = np.argmax(merged_logits, axis=-1)
         return inference.SequenceClassificationInferenceResult(merged_predictions.tolist(), merged_logits.tolist())

@@ -540,11 +540,46 @@ def get_preprocessing_fn(preprocessing_method: str, **kwargs: Any) -> PREPROCESS
     elif preprocessing_method == "drop":
         return _drop(**kwargs)
 
+    elif preprocessing_method == "substring":
+        return _substring(**kwargs)
+
     else:
         raise NotImplementedError(f"Preprocessing method {preprocessing_method} not implemented")
 
 
+def _substring(length: int,
+               seed: int = 22) -> PREPROCESSING_FN:
+    rand = np.random.default_rng(seed)
+
+    def _preprocessing_fn(seq: PREPROCESSING_INPUT_OUTPUT) -> PREPROCESSING_INPUT_OUTPUT:
+        def _sub(item: Dict[str, str]) -> Dict[str, str]:
+            assert "sequence" in item and "target_sequence" not in item
+
+            if len(item["sequence"]) > length:
+                start_idx = rand.integers(0, len(item["sequence"]) - length + 1)
+                item["sequence"] = item["sequence"][start_idx:start_idx + length]
+                assert len(item["sequence"]) == length
+
+            return item
+
+        if isinstance(seq, list):
+            seq = [_sub(t.copy()) for t in seq]
+        else:
+            seq = _sub(seq.copy())
+        return seq
+
+    return _preprocessing_fn
+
+
 def _drop(keys: List[str]) -> PREPROCESSING_FN:
+    """
+
+    Removes the specified keys from the input dictionary
+
+    :param keys: name of the keys to remove
+    :return:
+    """
+
     def _preprocessing_fn(seq: PREPROCESSING_INPUT_OUTPUT) -> PREPROCESSING_INPUT_OUTPUT:
         def _drop_function(item: Dict[str, str]) -> Dict[str, str]:
 
@@ -563,6 +598,13 @@ def _drop(keys: List[str]) -> PREPROCESSING_FN:
 
 
 def _skip() -> PREPROCESSING_FN:
+    """
+
+    Do nothing (useful to use together with switch to randomly apply some preprocessing)
+
+    :return:
+    """
+
     def _preprocessing_fn(seq: PREPROCESSING_INPUT_OUTPUT) -> PREPROCESSING_INPUT_OUTPUT:
         return seq
 
@@ -578,7 +620,7 @@ def _switch(functions: List[Dict] = None,
 
     :param functions: list of dictionaries that define other preprocessing functions
     :param prob: list of probabilities with which we choose each preprocessing function (must sum to 1)
-    :param seed:
+    :param seed: random seed
     """
     assert functions is not None and prob is not None, "functions and prob cannot be None"
     assert len(functions) == len(prob), "specify a probability for each switched preprocessing function"
@@ -657,7 +699,7 @@ def _character_masked_language_modeling(word_p: float = 0.15,
                     labels.extend([-1] * len(word))
 
                 if i < len(words) - 1:
-                    labels.append(-1)   # for the whitespace after each word
+                    labels.append(-1)  # for the whitespace after each word
 
             labels.append(-1)
             sequence = " ".join(masked_words)
@@ -993,6 +1035,7 @@ def _whitespace_corruption(iw_p: float = 0.2,
                            dw_p: float = 0.5,
                            no_ws: bool = False,
                            full_ws: bool = False,
+                           max_input_length: Optional[int] = None,
                            seed: int = 22) -> PREPROCESSING_FN:
     """
 
@@ -1003,6 +1046,7 @@ def _whitespace_corruption(iw_p: float = 0.2,
     :param dw_p: probability that a whitespace is deleted
     :param no_ws: if True, all whitespaces will be removed from sequence
     :param full_ws: if True, whitespaces will be inserted after every character in the sequence
+    :param max_input_length: restrict the maximum input sequence length
     :param seed: fix the random seed
     :return: corruption function with signature CORRUPTION_FN
     """
@@ -1013,29 +1057,26 @@ def _whitespace_corruption(iw_p: float = 0.2,
         def _no_ws(item: Dict[str, str]) -> Dict[str, str]:
             assert "sequence" in item, "need key sequence in dictionary to corrupt"
             sequence = nlp.clean_sequence(item["sequence"])
+            item["sequence"] = re.sub(r"\s", "", sequence)
 
             if "target_sequence" not in item:
                 item["target_sequence"] = sequence
 
-            item["sequence"] = re.sub(r"\s", "", sequence)
             return item
 
         def _full_ws(item: Dict[str, str]) -> Dict[str, str]:
             assert "sequence" in item, "need key sequence in dictionary to corrupt"
             sequence = nlp.clean_sequence(item["sequence"])
+            item["sequence"] = " ".join(re.sub(r"\s", "", sequence))
 
             if "target_sequence" not in item:
                 item["target_sequence"] = sequence
 
-            item["sequence"] = " ".join(re.sub(r"\s", "", sequence))
             return item
 
         def _insert_or_delete(item: Dict[str, str]) -> Dict[str, str]:
             assert "sequence" in item, "need key sequence in dictionary to corrupt"
             sequence = nlp.clean_sequence(item["sequence"])
-
-            if "target_sequence" not in item:
-                item["target_sequence"] = sequence
 
             new_s = ""
             sequence_ptr = 0
@@ -1057,6 +1098,9 @@ def _whitespace_corruption(iw_p: float = 0.2,
                 sequence_ptr += 1
 
             item["sequence"] = new_s
+
+            if "target_sequence" not in item:
+                item["target_sequence"] = sequence
 
             return item
 

@@ -5,8 +5,9 @@ import platform
 import re
 import shutil
 import zipfile
-from typing import List
+from typing import List, Union
 
+import numpy as np
 import requests
 import torch
 from tqdm import tqdm
@@ -98,8 +99,8 @@ def get_cpu_info() -> str:
     return platform.processor()
 
 
-def get_gpu_info() -> str:
-    device_props = torch.cuda.get_device_properties("cuda")
+def get_gpu_info(device: Union[str, int]) -> str:
+    device_props = torch.cuda.get_device_properties(device)
     return f"{device_props.name} ({device_props.total_memory // 1024 // 1024:,}MiB memory, " \
            f"{device_props.major}.{device_props.minor} compute capability, " \
            f"{device_props.multi_processor_count} multiprocessors)"
