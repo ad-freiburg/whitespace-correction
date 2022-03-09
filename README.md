@@ -20,6 +20,7 @@ pip install -r tokenization_repair/requirements.txt
 ### Usage
 
 #### From python
+
 ```python
 from trt import TokenizationRepairer, get_available_models
 
@@ -35,7 +36,7 @@ repaired_string = tok_rep.repair_text("p l e se,repiar thissen ten se!")
 # repair multiple strings at once
 repaired_strings = tok_rep.repair_text([
     "p l e se,repiar thissen ten se!",
-    "alsosplitthissentenceforme"    
+    "alsosplitthissentenceforme"
 ])
 
 # repair text file (every line is treated as a separate sequence to repair)
@@ -46,9 +47,8 @@ repaired_lines = tok_rep.repair_file("path/to/file.txt", output_file_path="save/
 
 #### From command line
 
-After installation the command `trt` is available in your python environment. It lets you use the tokenization 
-repair models directly from the command line. Below are examples of how to use `trt`. 
-See `trt -h` for all options.
+After installation the command `trt` is available in your python environment. It lets you use the tokenization repair
+models directly from the command line. Below are examples of how to use `trt`. See `trt -h` for all options.
 
 ```bash
 # print version
@@ -97,39 +97,45 @@ trt --server localhost:12345
 --report <file_path> # save a report on the runtime of the model in form of a markdown table in a file
 ```
 
-> Note: When first using `trt` with a pretrained model, the model needs to be downloaded, so depending on 
+> Note: When first using `trt` with a pretrained model, the model needs to be downloaded, so depending on
 > your internet speed the command might take considerably longer.
 
-> Note: Loading the tokenization repair model requires an initial startup time each time you 
-> invoke the `trt` command. CPU startup time is around 1s, GPU startup time around 3.5s, so for small 
+> Note: Loading the tokenization repair model requires an initial startup time each time you
+> invoke the `trt` command. CPU startup time is around 1s, GPU startup time around 3.5s, so for small
 > inputs or files you should probably pass the `-c` flag to force CPU execution for best performance.
 
 ### Documentation
 
 #### Use pretrained model
-If you just want to use this project to repair tokenization, this is the
-recommended way. See the available model for the names of all available
+
+If you just want to use this project to repair tokenization, this is the recommended way. See the available model for
+the names of all available
+
 ```python
 from trt import TokenizationRepairer, get_available_models
+
 tok_rep = TokenizationRepairer.from_pretrained(
     # pretrained model to load, get all available models from get_available_models() 
     # (eo_arxiv_with_errors by default)
-    model="eo_arxiv_with_errors", 
+    model="eo_arxiv_with_errors",
     # whether to use a GPU if available or not 
     # (True by default)
-    use_gpu=True, 
+    use_gpu=True,
     # optional path to a cache directory where pretrained models will be downloaded to,
     # if None, we check the env variable TOKENIZATION_REPAIR_CACHE_DIR, if it is not set 
     # we use a default cache directory at <trt_install_path>/api/.cache 
     # (None by default)
-    cache_dir=None, 
+    cache_dir=None,
 )
 ```
 
 #### Use own model
+
 Once you trained you model you can use it in the following way
+
 ```python
 from trt import TokenizationRepairer
+
 tok_rep = TokenizationRepairer.from_experiment(
     # path to the experiment directory that is created by your training run
     experiment_dir="path/to/experiment_dir",
@@ -144,6 +150,7 @@ See [tokenization_repair/README.md](tokenization_repair/README.md) for instructi
 ### Directory structure
 
 The most important directories you might want to look at are:
+
 ```
 configs -> (example yaml config files for data preprocessing, models and training)
 trt -> (library code used by this project)
@@ -157,22 +164,14 @@ tokenization_repair -> (actual tokenization repair project directory)
 
 ### Docker
 
-You can also run this project using docker. Build the image using 
+You can also run this project using docker. Build the image using
 
 `docker build -t tokenization_repair_transformers .`
 
 After that you can run the project using
 
 ```
-docker run -it [--gpus all] 
--p <local_port>:8501 
--v <experiments>:/trt/tokenization_repair/experiments 
-tokenization_repair_transformers
-
-where 
------
-<local_port> is the port you want to access the demo on in your browser
-<experiments> is the path to a directory where your training experiments are stored
+docker run -it [--gpus all] tokenization_repair_transformers
 
 Note
 -----
@@ -182,7 +181,13 @@ if you want to run the container with GPU support. You also need to add '--gpus 
 to the 'docker run' command from above.
 ```
 
-### Demo
+Inside the container the [`trt` command](#from-command-line) is available to you.
 
-To view the demo, start the project in a docker container using the instructions from above
-and execute `make demo`.
+If you e.g. have some text files you want to repair using the pretrained models start your container using
+`docker run --gpus all -v <directory_path>:/text_files -it tokenization_repair_transformers` where `<directory_path>`
+contains the text files. Then inside the container you can repair them
+with `trt -f /text_files/file_1.txt -o /text_files/file_1_repaired.txt`.
+
+You can also start a tokenization repair server inside the container using `trt --server 0.0.0.0:<port>`. Keep in mind
+that if you want to access the server from outside the container you have to expose the port using
+`docker run --gpus all -p <outside_port>:<port> -it tokenization_repair_transformers`.

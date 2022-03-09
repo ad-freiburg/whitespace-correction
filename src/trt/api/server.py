@@ -16,6 +16,7 @@ cli.show_server_banner = lambda *_: None
 os.environ["FLASK_ENV"] = "development"
 server = Flask(__name__)
 server.config["MAX_CONTENT_LENGTH"] = 2 * 1000 * 1000  # 2MB max file size
+server_base_url = os.environ.get("BASE_URL", "")
 flask_logger = logging.getLogger("werkzeug")
 flask_logger.disabled = True
 logger = common.get_logger("TRT_SERVER")
@@ -35,8 +36,11 @@ class TokenizationRepairers:
         self.timeout = timeout
         for i, model in enumerate(get_available_models()):
             self.locks[model.name] = threading.Lock()
-            self.streams[model.name] = torch.cuda.Stream()
-            tok_rep = TokenizationRepairer.from_pretrained(model.name, i % num_devices)
+            if num_devices > 0:
+                self.streams[model.name] = torch.cuda.Stream()
+                tok_rep = TokenizationRepairer.from_pretrained(model.name, i % num_devices)
+            else:
+                tok_rep = TokenizationRepairer.from_pretrained(model.name, "cpu")
             self.__setattr__(model.name, tok_rep)
             if i == 0:
                 self.default_model = model.name
@@ -58,7 +62,10 @@ class TokenizationRepairers:
                 yield f"too many requests, failed to acquire tokenization repairer " \
                       f"within the {self.timeout:.2f}s timeout limit", 503
             else:
-                with torch.cuda.stream(self.streams[name]):
+                if name in self.streams:
+                    with torch.cuda.stream(self.streams[name]):
+                        yield self.__getattribute__(name)
+                else:
                     yield self.__getattribute__(name)
                 self.locks[name].release()
 
@@ -66,9 +73,14 @@ class TokenizationRepairers:
 tok_repairers = TokenizationRepairers()
 
 
-@server.route("/models")
+def add_cors_header(response: Response) -> Response:
+    response.headers.add("Access-Control-Allow-Origin", os.environ.get("CORS_ORIGIN", "*"))
+    return response
+
+
+@server.route(f"{server_base_url}/models")
 def get_models():
-    return jsonify(
+    response = jsonify(
         {
             "models": [
                 {"name": model.name, "description": model.description}
@@ -77,52 +89,53 @@ def get_models():
             "default": tok_repairers.default_model
         }
     )
+    return add_cors_header(response)
 
 
-@server.route("/repair_text", methods=["GET"])
+@server.route(f"{server_base_url}/repair_text", methods=["GET"])
 def repair_text():
     start = time.perf_counter()
     text = request.args.get("text")
     if text is None:
         # text is a required field, send bad request as status code
-        return abort(Response("required query parameter \"text\" is missing", status=400))
+        return abort(add_cors_header(Response("required query parameter \"text\" is missing", status=400)))
     model = request.args.get("model", tok_repairers.default_model)
     with tok_repairers.get_repairer(model) as tok_rep:
         if isinstance(tok_rep, tuple):
             message, status_code = tok_rep
             logger.warning(f"Repairing text aborted with status {status_code}: {message}")
-            return abort(Response(message, status=status_code))
+            return abort(add_cors_header(Response(message, status=status_code)))
         else:
             repaired = tok_rep.repair_text(text)
     end = time.perf_counter()
     logger.info(f"Repairing text with {len(text)} chars using model {model} took {end - start:.4f}s")
-    return jsonify(
+    response = jsonify(
         {"repaired_text": repaired}
     )
+    return add_cors_header(response)
 
 
-@server.route("/repair_file", methods=["POST"])
+@server.route(f"{server_base_url}/repair_file", methods=["POST"])
 def repair_file():
     start = time.perf_counter()
-    data = request.data
-    if len(data) == 0:
-        return abort(Response("received no text data", status=400))
-    text = [line.strip() for line in data.decode("utf8").splitlines()]
+    text = request.form["text"]
+    text = [line.strip() for line in text.splitlines()]
     model = request.args.get("model", tok_repairers.default_model)
     with tok_repairers.get_repairer(model) as tok_rep:
         if isinstance(tok_rep, tuple):
             message, status_code = tok_rep
             logger.warning(f"Repairing file aborted with status {status_code}: {message}")
-            return abort(Response(message, status=status_code))
+            return abort(add_cors_header(Response(message, status=status_code)))
         else:
             repaired = tok_rep.repair_text(text)
     end = time.perf_counter()
     logger.info(f"Repairing file with {sum(len(l) for l in text)} chars using model {model} took {end - start:.2f}s")
-    return jsonify(
+    response = jsonify(
         {
             "repaired_file": repaired
         }
     )
+    return add_cors_header(response)
 
 
 def run_flask_server(host: str, port: int, timeout: float = 10) -> None:

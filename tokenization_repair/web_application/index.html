@@ -1,0 +1,209 @@
+<html lang="en" style="font-family: Helvetica, Arial, sans-serif">
+<head>
+    <meta charset="utf8">
+    <title>Tokenization repair</title>
+</head>
+<body style="width: 80%; height: 100%; margin: auto">
+<br>
+<h1 style="text-align: center">Tokenization repair using Transformers</h1>
+<br>
+<div style="width: 100%; margin: auto;">
+    <label for="select_model">Select model:</label>
+    <select id="select_model">
+    </select>
+    <p>Model description: <span id="model_description"></span></p>
+    <p id="select_model_error" style="display: none; color: darkred"></p>
+</div>
+<br>
+<section style="width: 100%">
+    <div style="width: 50%; float: left; overflow: hidden">
+        <h2 style="text-align: left">Repair text</h2>
+        <textarea id="repair_text" aria-label="repair_text"
+                  style="width: 80%; height: 15%; margin: auto; resize: none">Rpai rth issente nse!</textarea>
+        <br>
+        <br>
+        <button id="repair_text_button">Repair</button>
+        <br>
+        <br>
+        <div id="repair_text_spinner" style="display: none">
+            <img height="50px" width="50px" alt="spinner" src="spinner.gif">
+        </div>
+        <p id="repair_text_error" style="display: none; color: darkred"></p>
+        <textarea id="repaired_text" aria-label="repaired_text" readonly
+                  style="width: 80%; height: 15%; margin: auto; resize: none; display: none"></textarea>
+        <br>
+        <br>
+    </div>
+    <div style="width: 50%; float: left; overflow: hidden">
+        <h2 style="text-align: left">Repair file</h2>
+        <div style="width: 100%; margin: auto">
+            <form enctype="multipart/form-data">
+                <input id="repair_file" name="file" type="file"/>
+                <br>
+                <br>
+                <input id="repair_file_button" type="button" value="Repair"/>
+            </form>
+        </div>
+        <div id="repair_file_spinner" style="display: none">
+            <img height="50px" width="50px" alt="spinner" src="spinner.gif">
+        </div>
+        <p id="repair_file_error" style="display: none; color: darkred"></p>
+        <textarea id="repaired_file" aria-label="repaired_file" readonly
+                  style="width: 80%; height: 50%; margin: auto; resize: none; display: none"></textarea>
+        <br>
+        <br>
+    </div>
+</section>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script>
+    $(document).ready(() => {
+        let default_model;
+        let model_descriptions = {};
+        if (default_model === undefined) {
+            let select_model_error = $("#select_model_error");
+            select_model_error.hide();
+
+            $.ajax({
+                type: "GET",
+                url: "http://localhost:12345/models",
+                error: (_) => {
+                    select_model_error.html(`error loading models, refresh page to try again`);
+                    select_model_error.show();
+                },
+                success: (data) => {
+                    default_model = data["default"];
+                    let select_model = $('#select_model');
+                    for (const model of data["models"]) {
+                        model_descriptions[model["name"]] = model["description"];
+                        select_model.append($("<option>", {
+                            value: model["name"],
+                            text: model["name"]
+                        }));
+                    }
+                    select_model.trigger("change");
+                }
+            })
+        }
+
+        $("#select_model").on("change", () => {
+            let selected_model = $("#select_model").val();
+            $("#model_description").html(model_descriptions[selected_model]);
+        })
+
+        $("#repair_text_button").on("click", () => {
+            let repair_text_error = $("#repair_text_error");
+            repair_text_error.hide();
+            let repaired_text = $("#repaired_text");
+            repaired_text.hide();
+            let repair_text_spinner = $("#repair_text_spinner");
+            repair_text_spinner.hide();
+
+            if (default_model === undefined) {
+                repair_text_error.html("models not yet loaded");
+                repair_text_error.show();
+                return
+            }
+
+            let text = $("#repair_text").val();
+            let model = $("#select_model").val();
+            if (text !== "") {
+                $.ajax({
+                    type: "GET",
+                    url: "http://localhost:12345/repair_text?" +
+                        "text=" + encodeURIComponent(text) +
+                        "&model=" + encodeURIComponent(model),
+                    timeout: 600 * 1000,
+                    error: (xhr) => {
+                        let status_code = xhr.status;
+                        let message;
+                        if (status_code === 503) {
+                            message = "server is overloaded, try again";
+                        } else {
+                            message = "unknown error";
+                        }
+                        repair_text_error.html(`error repairing text with status code ${status_code}: ${message}`);
+                        repair_text_error.show();
+                    },
+                    success: (data) => {
+                        repaired_text.val(data["repaired_text"]);
+                        repaired_text.show();
+                    },
+                    beforeSend: () => {
+                        repair_text_spinner.show();
+                    },
+                    complete: () => {
+                        repair_text_spinner.hide();
+                    }
+                })
+            }
+        })
+        $("#repair_file_button").on("click", () => {
+            let repair_file_error = $("#repair_file_error");
+            repair_file_error.hide();
+            let repaired_file = $("#repaired_file");
+            repaired_file.hide();
+            let repair_file_spinner = $("#repair_file_spinner");
+            repair_file_spinner.hide();
+
+            if (default_model === undefined) {
+                repair_file_error.html("models not yet loaded");
+                repair_file_error.show();
+                return
+            }
+
+            let file_element = $("#repair_file")[0];
+            if (file_element.files.length === 0) {
+                return;
+            }
+            let file = file_element.files[0];
+            if (file.type !== "text/plain") {
+                repair_file_error.html(`uploaded file ${file.name} is of type ${file.type}, expected text/plain`);
+                repair_file_error.show();
+                return;
+            }
+            let file_reader = new FileReader();
+            file_reader.onload = () => {
+                let text_data = file_reader.result;
+                let model = $("#select_model").val();
+                $.ajax({
+                    type: "POST",
+                    url: "http://localhost:12345/repair_file?model=" + encodeURIComponent(model),
+                    data: {"text": text_data},
+                    timeout: 600 * 1000,
+                    error: (xhr) => {
+                        let status_code = xhr.status;
+                        let message;
+                        if (status_code === 503) {
+                            message = "server is overloaded, try again";
+                        } else {
+                            message = "unknown error";
+                        }
+                        repair_file_error.html(`error with status code ${status_code}: ${message}`);
+                        repair_file_error.show();
+                    },
+                    success: (data) => {
+                        let joined_lines = "";
+                        for (const line of data["repaired_file"]) {
+                            joined_lines += line + "\n";
+                        }
+                        repaired_file.val(joined_lines);
+                        repaired_file.show();
+                    },
+                    beforeSend: () => {
+                        repair_file_spinner.show();
+                    },
+                    complete: () => {
+                        repair_file_spinner.hide();
+                    }
+                })
+            }
+            file_reader.onerror = () => {
+                repair_file_error.html(`error reading file ${file.name}`);
+                repair_file_error.show();
+            }
+            file_reader.readAsText(file);
+        })
+    })
+</script>
+</body>
+</html>

@@ -1,17 +1,16 @@
 #!/bin/bash
 
 echo "
-      If you just want to look at the trained models and the demo:
-        make demo (after executing go to your browser to the port you specified when starting this container)
-      "
+Welcome to the tokenization repair project!
 
-echo "
-      If you want to reproduce the results by training yourself:
-        Read the README.md for instructions (e.g. use 'cat README.md' or open it in the browser or a markdown viewer)
-      "
+If you want to use the tokenization repair models (more details at https://github.com/bastiscode/trt#from-command-line):
+  trt -h
 
-echo "
-      Additional development-related make targets (not relevant for the end user):
-        make checkstyle (to check the code style using mypy and flake8)
-        make tests      (to run unittests using pytest)
-      "
+If you want to start a tokenization repair server (port 12345):
+  trt --server 0.0.0.0:12345
+
+If you want to reproduce the results from the paper by training yourself:
+  Read the README.md for instructions (e.g. use 'cat README.md' or open it in the browser or a markdown viewer)
+"
+
+/bin/bash
