@@ -25,8 +25,6 @@ train:
 
   loss:
     type: "seq2seq_cross_entropy"
-    arguments:
-      weights: [1, 5, 5, 1, 1, 1, 1, 1, 1]
 
   swap_inputs_and_targets: false
   mixed_precision: true
@@ -38,7 +36,7 @@ val:
   val_data: 5000
 
   text_metrics:
-    - name: "qualitative_batch_evaluation_tokenization_repair"
+    - name: "qualitative_batch_evaluation"
 
 model:
   name: "${MODEL_NAME}"
@@ -52,7 +50,7 @@ model:
     tokenizer: "char"
 
     embedding_dim: ${MODEL_DIM:512}
-    max_num_embeddings: ${MAX_SEQ_LENGTH:512}
+    max_num_embeddings: ${ENCODER_MAX_SEQ_LENGTH:512}
     learned_positional_embeddings: false
     norm_embeddings: true
     model_dim: ${MODEL_DIM:512}
@@ -60,15 +58,15 @@ model:
     attention_heads: ${NUM_HEADS:8}
     dropout: 0.1
 
-    num_layers: ${NUM_LAYERS}
+    num_layers: ${ENCODER_NUM_LAYERS}
     share_parameters: false
     activation: "gelu"
 
   decoder:
-    tokenizer: "tokenization_repair"
+    tokenizer: "char"
 
     embedding_dim: ${MODEL_DIM:512}
-    max_num_embeddings: ${MAX_SEQ_LENGTH:512}
+    max_num_embeddings: ${DECODER_MAX_SEQ_LENGTH:1024}
     learned_positional_embeddings: false
     norm_embeddings: true
     model_dim: ${MODEL_DIM:512}
@@ -76,6 +74,6 @@ model:
     attention_heads: ${NUM_HEADS:8}
     dropout: 0.1
 
-    num_layers: ${NUM_LAYERS}
+    num_layers: ${DECODER_NUM_LAYERS}
     share_parameters: false
     activation: "gelu"

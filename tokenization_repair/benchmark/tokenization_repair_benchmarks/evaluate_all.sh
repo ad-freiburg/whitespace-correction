@@ -1,9 +1,14 @@
 #!/bin/bash
 set -e
 
-BASE_DIR=$(dirname "$0")
+base_dir=$(dirname "$0")
+if [[ $1 == "" ]]; then
+  split=cleaned
+else
+  split=$1
+fi
 
-echo "Base directory: $BASE_DIR"
+echo "Base directory: $base_dir"
 
-python $BASE_DIR/../evaluate.py --groundtruths $BASE_DIR/cleaned_benchmarks/*/test/correct.txt \
-  --predictions $BASE_DIR/cleaned_results/*/test/*.txt --save-markdown-dir $BASE_DIR/evaluate_tables
+python ${base_dir}/../evaluate.py --groundtruths ${base_dir}/${split}_benchmarks/*/test/correct.txt \
+  --predictions ${base_dir}/${split}_results/*/test/*.txt --save-markdown-dir ${base_dir}/${split}_evaluate_tables

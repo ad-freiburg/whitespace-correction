@@ -9,6 +9,9 @@ target_tokenizer: "tokenization_repair"
 seed: 22
 
 preprocessing:
+  - type: "substring"
+    arguments:
+      length: 510
   - type: "switch"
     arguments:
       functions:
@@ -26,9 +29,14 @@ preprocessing:
       prob: [ 0.8, 0.1, 0.1 ]
       seed: 23
   - type: "tokenization_repair"
+    arguments:
+      output_type: "repair_token"
+      max_length: 510
 
 lmdb: true
 lmdb_name: "lmdb"
 
+pretokenize: true
+ensure_equal_length: true
 max_sequence_length: 512
 cut_overflowing: true

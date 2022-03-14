@@ -413,6 +413,7 @@ class DataPreprocessingConfig(BaseConfig):
                  tokenizer: str,
                  target_tokenizer: str,
                  pretokenize: bool,
+                 ensure_equal_length: bool,
                  preprocessing: List[PreprocessingConfig],
                  lmdb_name: str,
                  max_sequences: int,
@@ -424,6 +425,7 @@ class DataPreprocessingConfig(BaseConfig):
         self.tokenizer: str = tokenizer
         self.target_tokenizer: str = target_tokenizer
         self.pretokenize: bool = pretokenize
+        self.ensure_equal_length: bool = ensure_equal_length
         self.preprocessing: List[PreprocessingConfig] = preprocessing
         self.lmdb_name: str = lmdb_name
         self.max_sequences: int = max_sequences
@@ -443,6 +445,7 @@ class DataPreprocessingConfig(BaseConfig):
                                          tokenizer=d["tokenizer"],
                                          target_tokenizer=d.get("target_tokenizer", None),
                                          pretokenize=d.get("pretokenize", False),
+                                         ensure_equal_length=d.get("ensure_equal_length", False),
                                          preprocessing=preprocessing_config,
                                          lmdb_name=d.get("lmdb_name", "lmdb"),
                                          max_sequences=d.get("max_sequences", None),

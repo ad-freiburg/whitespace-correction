@@ -1,4 +1,6 @@
+import math
 import queue
+import time
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple, Union
 
@@ -46,6 +48,49 @@ class SequenceGenerationInferenceResult(InferenceResult):
     @property
     def length(self) -> int:
         return len(self.token_ids)
+
+
+class Beam:
+    def __init__(self,
+                 log_probabilities: List[float],
+                 token_ids: List[int],
+                 eos: bool):
+        self.log_probabilities = log_probabilities
+        self.token_ids = token_ids
+        self.eos = eos
+
+    def get_decoder_input(self, device: torch.device) -> torch.Tensor:
+        return torch.tensor(self.token_ids, device=device)
+
+
+DeTokFn = Callable[[List[int]], str]
+SelectFn = Callable[[List[Tuple[Beam, float]]], Beam]
+ScoreFn = Callable[[Beam, Optional[str]], float]
+
+
+def log_likelihood_score_fn(normalize_by_length: bool = True, alpha: float = 1.0) -> ScoreFn:
+    def _log_l(beam: Beam, _: str = None) -> float:
+        s = sum(beam.log_probabilities)
+        if normalize_by_length:
+            s /= (len(beam.log_probabilities) ** alpha)
+        return s
+
+    return _log_l
+
+
+def greedy_select_fn() -> SelectFn:
+    def _greedy(beams: List[Tuple[Beam, float]]) -> Beam:
+        return beams[0][0]
+
+    return _greedy
+
+
+def sample_select_fn(sample_top_k: int) -> SelectFn:
+    def _greedy(beams: List[Tuple[Beam, float]]) -> Beam:
+        sample_idx = torch.randint(min(len(beams), sample_top_k)).item()
+        return beams[sample_idx][0]
+
+    return _greedy
 
 
 def get_temperatures_thresholds_and_defaults(
@@ -131,10 +176,13 @@ def inference_with_ids(
         model: nn.Module,
         bos_token_id: int,
         eos_token_id: int,
-        max_length: int,
+        max_input_length: int,
+        max_output_length: int,
         device: torch.device,
         method: str,
         decoder_only: bool = False,
+        score_fn: ScoreFn = log_likelihood_score_fn(),
+        input_strings: Optional[List[str]] = None,
         input_ids: Optional[torch.Tensor] = None,
         decoder_input_ids: Optional[List[torch.Tensor]] = None,
         decoder_padding_token_id: Optional[int] = None,
@@ -144,9 +192,12 @@ def inference_with_ids(
         return batch_inference(model=model,
                                bos_token_id=bos_token_id,
                                eos_token_id=eos_token_id,
-                               max_length=max_length,
+                               max_input_length=max_input_length,
+                               max_output_length=max_output_length,
                                device=device,
-                               token_fn=_greedy_token_fn(),
+                               select_fn=greedy_select_fn(),
+                               score_fn=score_fn,
+                               input_strings=input_strings,
                                input_ids=input_ids,
                                decoder_only=decoder_only,
                                decoder_input_ids=decoder_input_ids,
@@ -155,9 +206,12 @@ def inference_with_ids(
         return batch_inference(model=model,
                                bos_token_id=bos_token_id,
                                eos_token_id=eos_token_id,
-                               max_length=max_length,
+                               max_input_length=max_input_length,
+                               max_output_length=max_output_length,
                                device=device,
-                               token_fn=_sample_token_fn(kwargs.pop("sample_top_k", 3)),
+                               select_fn=sample_select_fn(kwargs.get("sample_top_k", 3)),
+                               score_fn=score_fn,
+                               input_strings=input_strings,
                                input_ids=input_ids,
                                decoder_only=decoder_only,
                                decoder_input_ids=decoder_input_ids,
@@ -166,8 +220,11 @@ def inference_with_ids(
         return beam_inference(model=model,
                               bos_token_id=bos_token_id,
                               eos_token_id=eos_token_id,
-                              max_length=max_length,
+                              max_input_length=max_input_length,
+                              max_output_length=max_output_length,
                               device=device,
+                              score_fn=score_fn,
+                              input_strings=input_strings,
                               beam_width=kwargs.pop("beam_width", 3),
                               input_ids=input_ids,
                               decoder_only=decoder_only,
@@ -208,7 +265,9 @@ def batch_autoregressive_decode(model: nn.Module,
                                 eos_token_id: int,
                                 max_length: int,
                                 device: torch.device,
-                                token_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]],
+                                select_fn: SelectFn,
+                                score_fn: ScoreFn = log_likelihood_score_fn(),
+                                input_strings: Optional[List[str]] = None,
                                 encoder_outputs: Optional[torch.Tensor] = None,
                                 encoder_padding_mask: Optional[torch.Tensor] = None,
                                 decoder_input_ids: Optional[List[torch.Tensor]] = None,
@@ -261,7 +320,7 @@ def batch_autoregressive_decode(model: nn.Module,
     indices_to_decode = non_eos_mask & smaller_max_length_mask
 
     while True:
-
+        # start = time.perf_counter()
         max_input_length = torch.max(lengths)
         target_input_ids = token_ids[indices_to_decode, :max_input_length]
 
@@ -274,17 +333,45 @@ def batch_autoregressive_decode(model: nn.Module,
                                              memory=encoder_outputs_i,
                                              memory_key_padding_mask=encoder_padding_mask_i)  # S x B x C
 
-        selected_decoder_outputs = []
+        # start_score = time.perf_counter()
+        batch_indices = torch.where(indices_to_decode)[0].tolist()
+        inferred_token_ids = []
+        inferred_log_prob = []
         for i in range(decoder_output.shape[1]):
             length = lengths[indices_to_decode][i]
-            selected_decoder_outputs.append(decoder_output[length - 1, i, :])
+            log_softmax_scores = torch.log_softmax(decoder_output[length - 1, i], dim=0)
 
-        selected_decoder_outputs = torch.stack(selected_decoder_outputs)
+            min_log_p = math.log(1 / len(log_softmax_scores))
 
-        inferred_token_ids, token_log_probs = token_fn(selected_decoder_outputs)
+            batch_idx = batch_indices[i]
+            beams_and_scores = []
+            for token_id, lp in enumerate(log_softmax_scores.tolist()):
+                if lp < min_log_p:
+                    continue
+                beam = Beam(
+                    log_probabilities=log_probs[batch_idx, :length].tolist() + [lp],
+                    token_ids=token_ids[batch_idx, :length].tolist() + [token_id],
+                    eos=token_id == eos_token_id
+                )
+                beams_and_scores.append(
+                    (beam, -score_fn(beam, input_strings[batch_idx] if input_strings is not None else None))
+                )
+            beams_and_scores = sorted(beams_and_scores, key=lambda e: e[1])
+            selected_beam = select_fn(beams_and_scores)
+            inferred_token_ids.append(selected_beam.token_ids[-1])
+            inferred_log_prob.append(selected_beam.log_probabilities[-1])
 
+        # end_score = time.perf_counter()
+        # print(f"scoring beams took {(end_score - start_score) * 1000}ms")
+
+        inferred_token_ids = torch.tensor(
+            inferred_token_ids, dtype=torch.long, device=token_ids.device
+        )
         token_ids[indices_to_decode, lengths[indices_to_decode]] = inferred_token_ids
-        log_probs[indices_to_decode, lengths[indices_to_decode]] = token_log_probs
+        inferred_log_prob = torch.tensor(
+            inferred_log_prob, dtype=torch.float, device=log_probs.device
+        )
+        log_probs[indices_to_decode, lengths[indices_to_decode]] = inferred_log_prob
 
         lengths[indices_to_decode] += 1
 
@@ -300,6 +387,9 @@ def batch_autoregressive_decode(model: nn.Module,
         # all sequences are at max length or all finished with eos token
         if torch.sum(indices_to_decode) == 0:
             break
+
+        # end = time.perf_counter()
+        # print(f"one round took {(end - start) * 1000}ms")
 
     results = []
     token_ids = token_ids.tolist()
@@ -345,9 +435,12 @@ def _sample_token_fn(sample_top_k: int) -> Callable[[torch.Tensor], Tuple[torch.
 def batch_inference(model: nn.Module,
                     bos_token_id: int,
                     eos_token_id: int,
-                    max_length: int,
+                    max_input_length: int,
+                    max_output_length: int,
                     device: torch.device,
-                    token_fn: Callable[[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]],
+                    select_fn: SelectFn,
+                    score_fn: ScoreFn = log_likelihood_score_fn(),
+                    input_strings: Optional[List[str]] = None,
                     decoder_only: bool = False,
                     input_ids: Optional[torch.Tensor] = None,
                     decoder_input_ids: Optional[List[torch.Tensor]] = None,
@@ -357,8 +450,10 @@ def batch_inference(model: nn.Module,
         return batch_autoregressive_decode(model=model,
                                            bos_token_id=bos_token_id,
                                            eos_token_id=eos_token_id,
-                                           token_fn=token_fn,
-                                           max_length=max_length,
+                                           max_length=max_output_length,
+                                           select_fn=select_fn,
+                                           score_fn=score_fn,
+                                           input_strings=input_strings,
                                            encoder_outputs=None,
                                            decoder_input_ids=decoder_input_ids,
                                            decoder_padding_token_id=decoder_padding_token_id,
@@ -368,15 +463,17 @@ def batch_inference(model: nn.Module,
         assert input_ids is not None
         encoder_outputs, encoder_memory_padding_mask = batch_encode(model=model,
                                                                     input_ids=input_ids,
-                                                                    max_length=max_length,
+                                                                    max_length=max_input_length,
                                                                     device=device,
                                                                     return_memory_padding_mask=True)
 
         return batch_autoregressive_decode(model=model,
                                            bos_token_id=bos_token_id,
                                            eos_token_id=eos_token_id,
-                                           token_fn=token_fn,
-                                           max_length=max_length,
+                                           max_length=max_output_length,
+                                           select_fn=select_fn,
+                                           score_fn=score_fn,
+                                           input_strings=input_strings,
                                            encoder_outputs=encoder_outputs,
                                            encoder_padding_mask=encoder_memory_padding_mask,
                                            decoder_input_ids=decoder_input_ids,
@@ -384,30 +481,15 @@ def batch_inference(model: nn.Module,
                                            device=device)
 
 
-class _InferenceEntry:
-    def __init__(self,
-                 log_probabilities: List[float],
-                 token_ids: List[int],
-                 eos: bool,
-                 alpha: float = 0.7):
-        self.log_probabilities = log_probabilities
-        self.token_ids = token_ids
-        self.eos = eos
-        self.alpha = alpha
-
-    def get_decoder_input(self, device: torch.device) -> torch.Tensor:
-        return torch.tensor(self.token_ids, device=device)
-
-    def eval(self) -> float:
-        return sum(self.log_probabilities) / (len(self.log_probabilities) ** self.alpha)
-
-
 def beam_inference(model: nn.Module,
                    bos_token_id: int,
                    eos_token_id: int,
-                   max_length: int,
+                   max_input_length: int,
+                   max_output_length: int,
                    device: torch.device,
                    beam_width: int,
+                   score_fn: ScoreFn = log_likelihood_score_fn(),
+                   input_strings: Optional[List[str]] = None,
                    input_ids: Optional[torch.Tensor] = None,
                    decoder_only: Optional[bool] = False,
                    decoder_input_ids: Optional[List[torch.Tensor]] = None) -> List[
@@ -431,29 +513,33 @@ def beam_inference(model: nn.Module,
     else:
         encoder_outputs, encoder_memory_padding_mask = batch_encode(model=model,
                                                                     input_ids=input_ids,
-                                                                    max_length=max_length,
+                                                                    max_length=max_input_length,
                                                                     device=device,
                                                                     return_memory_padding_mask=True)
 
-    all_beams: List[List[_InferenceEntry]] = []
+    all_beams: List[List[Beam]] = []
 
     for b in range(B):
         beam_queue: queue.PriorityQueue = queue.PriorityQueue()
         # store current beams here, there will be always exactly beam width entries
         if decoder_input_ids is not None:
             decoder_input_ids_i = decoder_input_ids[b]
-            current_beams = [_InferenceEntry(log_probabilities=[0.0] * len(decoder_input_ids_i),
-                                             token_ids=decoder_input_ids_i.tolist(),
-                                             eos=False)
-                             for _ in range(beam_width)]
+            current_beams = [
+                Beam(log_probabilities=[0.0] * len(decoder_input_ids_i),
+                     token_ids=decoder_input_ids_i.tolist(),
+                     eos=False)
+                for _ in range(beam_width)
+            ]
 
             initial_input_ids = decoder_input_ids_i
 
             search_depth = len(decoder_input_ids_i)
 
         else:
-            current_beams = [_InferenceEntry(log_probabilities=[0.0], token_ids=[bos_token_id], eos=False)
-                             for _ in range(beam_width)]
+            current_beams = [
+                Beam(log_probabilities=[0.0], token_ids=[bos_token_id], eos=False)
+                for _ in range(beam_width)
+            ]
 
             initial_input_ids = torch.tensor([bos_token_id], device=device)
 
@@ -484,7 +570,7 @@ def beam_inference(model: nn.Module,
 
         search_depth += 1
 
-        while beam_queue.qsize() < beam_width and search_depth < max_length:
+        while beam_queue.qsize() < beam_width and search_depth < max_output_length:
             # build target input and target mask
             # run all beams that are not eos in parallel
             target_input_ids = torch.stack([b.get_decoder_input(device=device) for b in current_beams], dim=0)
@@ -495,42 +581,42 @@ def beam_inference(model: nn.Module,
                 decoder_output = model.decode(target_input_ids.T,
                                               repeated_encoder_outputs_i)[0][-1, :, :]
 
-            log_softmax_scores = torch.log_softmax(decoder_output, dim=1)
-
-            # get topk for each node
-            top_k_log_probabilities, top_k_indices = torch.topk(log_softmax_scores, beam_width, dim=1)
+            log_softmax_scores = torch.log_softmax(decoder_output, dim=1).tolist()
 
             beam_candidates = []
-            for i, top_k in enumerate(top_k_indices):
-                for j, token_id in enumerate(top_k):
-                    log_p = top_k_log_probabilities[i, j].item()
-                    token_id = token_id.item()
-                    beam = current_beams[i]
-                    entry = _InferenceEntry(log_probabilities=beam.log_probabilities + [log_p],
-                                            token_ids=beam.token_ids + [token_id],
-                                            eos=token_id == eos_token_id)
-                    beam_candidates.append(entry)
+            for beam_idx in range(len(log_softmax_scores)):
+                for token_id, lp in enumerate(log_softmax_scores):
+                    beam = current_beams[beam_idx]
+                    entry = Beam(log_probabilities=beam.log_probabilities + [lp],
+                                 token_ids=beam.token_ids + [token_id],
+                                 eos=token_id == eos_token_id)
+                    beam_candidates.append((entry, -score_fn(beam, input_strings[beam_idx])))
 
             # sort the candidates, and keep best num_candidates = 2 * beam_width (because then we have at least
             # beam_width non-eos beams in the candidates, this ensures we always have beam_width candidates
             # for each depth)
-            sorted_beams = sorted(beam_candidates, key=lambda b: -b.eval())[:num_candidates]
+            sorted_beams = sorted(beam_candidates, key=lambda b: b[1])[:num_candidates]
 
             current_beams = []
-            idx = 0
-            while len(current_beams) < beam_width:
-                beam = sorted_beams[idx]
+            for beam, score in sorted_beams:
                 if beam.eos:
-                    beam_queue.put((-beam.eval(), beam))
+                    beam_queue.put(
+                        (score, beam)
+                    )
                 else:
                     current_beams.append(beam)
-                idx += 1
+
+                if len(current_beams) >= beam_width:
+                    break
+
             search_depth += 1
 
         # if there were not enough beams with eos found before reaching max_length, add the current beams to the queue
         if beam_queue.qsize() < beam_width:
             for beam in current_beams:
-                beam_queue.put((-beam.eval(), beam))
+                beam_queue.put(
+                    (-score_fn(beam, input_strings[b] if input_strings is not None else None), beam)
+                )
 
         output_beams = [beam_queue.get()[1] for _ in range(beam_width)]
         all_beams.append(output_beams)

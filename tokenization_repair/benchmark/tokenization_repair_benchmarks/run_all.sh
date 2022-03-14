@@ -1,14 +1,19 @@
 #!/bin/bash
 set -e
 
-BASE_DIR=$(dirname "$0")
+base_dir=$(dirname "$0")
+if [[ $1 == "" ]]; then
+  split=cleaned
+else
+  split=$1
+fi
 
-echo "Base directory: $BASE_DIR"
+echo "Base directory: ${base_dir}"
 
-CLEANED_BENCHMARKS="$BASE_DIR/cleaned_benchmarks"
-CLEANED_RESULTS="$BASE_DIR/cleaned_results"
+benchmarks=${base_dir}/${split}_benchmarks
+results=${base_dir}/${split}_results
 
-EXPERIMENTS=$(echo $BASE_DIR/../../experiments/*)
+EXPERIMENTS=$(echo ${base_dir}/../../experiments/*)
 
 EXP_REGEX=${EXP_REGEX:-"*"}
 
@@ -32,10 +37,15 @@ do
     continue
   fi
 
-  benchmarks=$CLEANED_BENCHMARKS/${BENCHMARK:-*}/test/corrupt.txt
+  test_benchmarks=${benchmarks}/${BENCHMARK:-*}/test/corrupt.txt
 
-  python $BASE_DIR/../run.py --experiment $exp -bs ${BATCH_SIZE:-16} -sb -d $device_string -sp \
-    -tr --benchmarks $benchmarks --output-dir $CLEANED_RESULTS \
-    --save-markdown-dir $BASE_DIR/runtime_tables --model-name $model_name
-
+#  python ${base_dir}/../run.py --experiment $exp -bs ${BATCH_SIZE:-16} -sb -d ${device_string} -sp \
+#    -tr --benchmarks ${test_benchmarks} --output-dir ${results} \
+#    --save-markdown-dir ${base_dir}/${split}_runtime_tables --model-name ${model_name}
+  for benchmark in $test_benchmarks
+  do
+    trt -e $exp \
+    -f $benchmark \
+    -o ${results}/$(dirname $(realpath $benchmark --relative-to $benchmarks))/${model_name}.txt
+  done
 done

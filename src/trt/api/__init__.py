@@ -9,9 +9,9 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from trt.api.utils import download_model, get_device_info, split
-from trt.model import transformer
-from trt.utils import common, config, io, inference, nlp, tokenization_repair
+from trt.api.utils import download_model, get_device_info, split, char2char_score_fn
+from trt.model import transformer, tokenizer
+from trt.utils import common, config, io, inference, nlp, tokenization_repair, constants
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -37,6 +37,14 @@ def get_available_models() -> List[ModelInfo]:
             description="smallest and fastest, but also the least accurate model, "
                         "use this when you want to repair text with few tokenization errors and "
                         "little to no OCR or spelling errors fast"
+        ),
+        ModelInfo(
+            name="nmt_medium_arxiv_with_errors",
+            description="nmt model, similar in size to eo_medium_arxiv_with_errors"
+        ),
+        ModelInfo(
+            name="nmt_small_arxiv_with_errors",
+            description="nmt model, similar in size to eo_small_arxiv_with_errors"
         )
     ]
 
@@ -90,7 +98,7 @@ class TokenizationRepairer:
         self.logger.info(f"running tokenization repair on device {get_device_info(self.device)}")
 
         self.cfg = config.Config.from_yaml(os.path.join(model_dir, "config.yaml"))
-        self.logger.debug(f"loaded model config:\n{self.cfg}")
+        self.logger.debug(f"loaded model config:\n{self.cfg.model}")
 
         self.model = transformer.get_model_from_config(self.cfg.model, self.device)
         best_checkpoint_path = io.glob_safe(os.path.join(model_dir, "checkpoints", "*-checkpoint-best.pt"))[0]
@@ -100,41 +108,59 @@ class TokenizationRepairer:
         for param in self.model.parameters():
             param.requires_grad = False
 
-        # set default inference kwargs
-        self.inference_kwargs = {
-            "temperature": 1.0,
-            "temperature_no_spaces": 1.0,
-            "thresholds_and_default": None,
-            "thresholds_and_default_no_spaces": None
-        }
+        if (
+                self.cfg.model.type == "encoder_with_head"
+                and self.cfg.model.encoder.tokenizer == "char"
+        ):
+            # set default inference kwargs
+            self.inference_kwargs = {
+                "temperature": 1.0,
+                "temperature_no_spaces": 1.0,
+                "thresholds_and_default": None,
+                "thresholds_and_default_no_spaces": None
+            }
 
-        # check if the corresponding inference pickle files are in the model dir, if so, load them
-        temperature_path = os.path.join(model_dir, "temperature.pkl")
-        temperature_no_spaces_path = os.path.join(model_dir, "temperature_no_spaces.pkl")
-        thresholds_and_default_path = os.path.join(model_dir, "thresholds_and_default.pkl")
-        thresholds_and_default_no_spaces_path = os.path.join(model_dir, "thresholds_and_default_no_spaces.pkl")
-        if os.path.exists(temperature_path):
-            with open(temperature_path, "rb") as tf:
-                temp = pickle.load(tf)
-                self.inference_kwargs["temperature"] = temp
-            self.logger.debug(f"found temperature file: setting temperature to {temp}")
-        if os.path.exists(temperature_no_spaces_path):
-            with open(temperature_no_spaces_path, "rb") as tf:
-                temp_no_spaces = pickle.load(tf)
-                self.inference_kwargs["temperature_no_spaces"] = temp_no_spaces
-            self.logger.debug(f"found temperature (no spaces) file: setting temperature to {temp_no_spaces}")
-        if os.path.exists(thresholds_and_default_path):
-            with open(thresholds_and_default_path, "rb") as tf:
-                thresholds_and_default = pickle.load(tf)
-                self.inference_kwargs["thresholds_and_default"] = thresholds_and_default
-            self.logger.debug(f"found thresholds_and_default file: setting thresholds and default to "
-                              f"{thresholds_and_default}")
-        if os.path.exists(thresholds_and_default_no_spaces_path):
-            with open(thresholds_and_default_no_spaces_path, "rb") as tf:
-                thresholds_and_default_no_spaces = pickle.load(tf)
-                self.inference_kwargs["thresholds_and_default_no_spaces"] = thresholds_and_default_no_spaces
-            self.logger.debug(f"found thresholds_and_default (no spaces) file: setting thresholds and default to "
-                              f"{thresholds_and_default_no_spaces}")
+            # check if the corresponding inference pickle files are in the model dir, if so, load them
+            temperature_path = os.path.join(model_dir, "temperature.pkl")
+            temperature_no_spaces_path = os.path.join(model_dir, "temperature_no_spaces.pkl")
+            thresholds_and_default_path = os.path.join(model_dir, "thresholds_and_default.pkl")
+            thresholds_and_default_no_spaces_path = os.path.join(model_dir, "thresholds_and_default_no_spaces.pkl")
+            if os.path.exists(temperature_path):
+                with open(temperature_path, "rb") as tf:
+                    temp = pickle.load(tf)
+                    self.inference_kwargs["temperature"] = temp
+                self.logger.debug(f"found temperature file: setting temperature to {temp}")
+            if os.path.exists(temperature_no_spaces_path):
+                with open(temperature_no_spaces_path, "rb") as tf:
+                    temp_no_spaces = pickle.load(tf)
+                    self.inference_kwargs["temperature_no_spaces"] = temp_no_spaces
+                self.logger.debug(f"found temperature (no spaces) file: setting temperature to {temp_no_spaces}")
+            if os.path.exists(thresholds_and_default_path):
+                with open(thresholds_and_default_path, "rb") as tf:
+                    thresholds_and_default = pickle.load(tf)
+                    self.inference_kwargs["thresholds_and_default"] = thresholds_and_default
+                self.logger.debug(f"found thresholds_and_default file: setting thresholds and default to "
+                                  f"{thresholds_and_default}")
+            if os.path.exists(thresholds_and_default_no_spaces_path):
+                with open(thresholds_and_default_no_spaces_path, "rb") as tf:
+                    thresholds_and_default_no_spaces = pickle.load(tf)
+                    self.inference_kwargs["thresholds_and_default_no_spaces"] = thresholds_and_default_no_spaces
+                self.logger.debug(f"found thresholds_and_default (no spaces) file: setting thresholds and default to "
+                                  f"{thresholds_and_default_no_spaces}")
+        elif (
+                self.cfg.model.type == "transformer"
+                and self.cfg.model.encoder.tokenizer == "char"
+                and self.cfg.model.decoder.tokenizer == "char"
+        ):
+            self.char_tokenizer = tokenizer.load_tokenizer("char")
+            self.unk_token_id = self.char_tokenizer.token_to_id(constants.UNK)
+            self.ws_token_id = self.char_tokenizer.token_to_id(" ")
+            self.inference_kwargs = {
+                "score_fn": char2char_score_fn(self.char_tokenizer)
+            }
+        else:
+            raise RuntimeError(f"model should either be of type encoder_with_head with a char encoder tokenizer "
+                               f"or of type transformer with both a char encoder and decoder tokenizer")
 
         self.max_length = self.model.encoder.config.max_num_embeddings - 2  # - 2 because of bos and eos tokens
         self.overlap = math.ceil(self.max_length / 2)
@@ -142,7 +168,10 @@ class TokenizationRepairer:
 
     def _merge_inference_results(
             self,
-            inference_results: List[inference.SequenceClassificationInferenceResult],
+            inference_results: List[
+                Union[inference.SequenceGenerationInferenceResult,
+                      inference.SequenceClassificationInferenceResult]
+            ],
             start_positions: List[int]
     ) -> inference.InferenceResult:
         assert (
@@ -150,7 +179,16 @@ class TokenizationRepairer:
                 and len(inference_results) == len(start_positions)
                 and sorted(start_positions) == start_positions
         )
-        if len(inference_results) == 1:
+        if isinstance(inference_results[0], inference.SequenceGenerationInferenceResult):
+            assert len(inference_results) == 1
+            return inference_results[0]
+
+        elif isinstance(inference_results[0], list) and isinstance(inference_results[0][0],
+                                                                   inference.SequenceGenerationInferenceResult):
+            assert len(inference_results) == 1
+            return inference_results[0][0]
+
+        elif len(inference_results) == 1:
             return inference_results[0]
 
         num_merged_predictions = 2 + start_positions[-1] + self.max_length
@@ -172,6 +210,35 @@ class TokenizationRepairer:
         merged_logits /= num_logit_updates
         merged_predictions = np.argmax(merged_logits, axis=-1)
         return inference.SequenceClassificationInferenceResult(merged_predictions.tolist(), merged_logits.tolist())
+
+    def _inference_result_to_str(
+            self,
+            inference_result: Union[
+                inference.SequenceGenerationInferenceResult,
+                inference.SequenceClassificationInferenceResult
+            ],
+            input_str: str
+    ) -> str:
+        if isinstance(inference_result, inference.SequenceClassificationInferenceResult):
+            return tokenization_repair.repair_whitespace(
+                input_str,
+                inference_result.predictions[1:-1]
+            )
+        else:
+            output_str = ""
+            input_str_no_spaces = input_str.replace(" ", "")
+            input_str_no_spaces_ptr = 0
+            for token_id in inference_result.token_ids[1:-1]:
+                char = (
+                    self.char_tokenizer.id_to_token(token_id) if token_id != self.unk_token_id
+                    else input_str_no_spaces[input_str_no_spaces_ptr]
+                )
+                output_str += char
+                if token_id != self.ws_token_id:
+                    input_str_no_spaces_ptr += 1
+
+            assert output_str.replace(" ", "") == input_str_no_spaces, f"{input_str} --> {output_str}"
+            return output_str
 
     @torch.inference_mode()
     def _repair_text_raw(
@@ -227,7 +294,8 @@ class TokenizationRepairer:
             )
 
             kwargs = {
-                "no_spaces": [" " not in ipt for ipt in batch]
+                "no_spaces": [" " not in ipt for ipt in batch],
+                "input_strings": batch
             }
             # add inference keyword arguments to the model
             kwargs.update(self.inference_kwargs)
@@ -268,13 +336,7 @@ class TokenizationRepairer:
 
         inference_results = self._repair_text_raw(inputs, batch_size, sort_by_length, show_progress)
 
-        outputs = [
-            tokenization_repair.repair_whitespace(
-                ipt,
-                ir.predictions[1:-1]
-            )
-            for ipt, ir in zip(inputs, inference_results)
-        ]
+        outputs = [self._inference_result_to_str(ir, ipt) for ipt, ir in zip(inputs, inference_results)]
         return outputs[0] if input_is_string else outputs
 
     def repair_text_iter(

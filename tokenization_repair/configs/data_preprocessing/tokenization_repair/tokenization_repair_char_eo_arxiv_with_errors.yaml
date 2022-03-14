@@ -8,6 +8,9 @@ tokenizer: "char"
 seed: 22
 
 preprocessing:
+  - type: "substring"
+    arguments:
+      length: 510
   - type: "switch"
     arguments:
       functions:
@@ -26,10 +29,13 @@ preprocessing:
       seed: 23
   - type: "tokenization_repair"
     arguments:
-      use_labels: true
+      output_type: "label"
+      max_length: 510
 
 lmdb: true
 lmdb_name: "lmdb"
 
+pretokenize: true
+ensure_equal_length: true
 max_sequence_length: 512
 cut_overflowing: true

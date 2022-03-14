@@ -33,6 +33,7 @@ def process_line(tokenizer: tokenizers.Tokenizer,
                  target_tokenizer: tokenizers.Tokenizer,
                  line: str,
                  pretokenize: bool,
+                 ensure_equal_length: bool,
                  preprocessing_fn: Optional[data.PREPROCESSING_FN] = None) -> Optional[Dict[str, List[int]]]:
     json_obj: Dict[str, str] = json.loads(line)
 
@@ -51,7 +52,7 @@ def process_line(tokenizer: tokenizers.Tokenizer,
 
     if "labels" in json_obj:
         enc_dict["labels"] = json_obj["labels"]
-        if len(enc_dict["labels"]) != len(enc_dict["input_ids"]):
+        if ensure_equal_length and len(enc_dict["labels"]) != len(enc_dict["input_ids"]):
             lengths = {k: len(v) for k, v in enc_dict.items()}
             logger.info(f"Skipping sample because lengths of input ids and labels are not equal: {lengths}\n"
                         f"{sequence} --> {enc_dict['labels']}")
@@ -66,7 +67,7 @@ def process_line(tokenizer: tokenizers.Tokenizer,
         enc = target_tokenizer.encode(target_sequence, is_pretokenized=pretokenize, pair=None)
         enc_dict["target_input_ids"] = enc.ids
 
-        if len(enc_dict["target_input_ids"]) != len(enc_dict["input_ids"]):
+        if ensure_equal_length and len(enc_dict["target_input_ids"]) != len(enc_dict["input_ids"]):
             lengths = {k: len(v) for k, v in enc_dict.items()}
             logger.info(f"Skipping sample because lengths of input ids and target ids are not equal: {lengths}\n"
                         f"{sequence} --> {target_sequence}")
@@ -80,6 +81,7 @@ def process_files(queue: mp.Queue,
                   tokenizer_path: tokenizers.Tokenizer,
                   target_tokenizer_path: tokenizers.Tokenizer,
                   pretokenize: bool,
+                  ensure_equal_length: bool,
                   preprocessing_fn: data.PREPROCESSING_FN,
                   max_sequence_length: int,
                   cut_overflowing: bool) -> None:
@@ -93,6 +95,7 @@ def process_files(queue: mp.Queue,
                                         target_tokenizer,
                                         line,
                                         pretokenize=pretokenize,
+                                        ensure_equal_length=ensure_equal_length,
                                         preprocessing_fn=preprocessing_fn)
                 if enc_dict is None:
                     continue
@@ -123,6 +126,7 @@ def write_lmdb(output_dir: str,
                tokenizer_path: str,
                target_tokenizer_path: str,
                pretokenize: bool,
+               ensure_equal_length: bool,
                preprocessing_fn: data.PREPROCESSING_FN,
                max_sequence_length: int,
                cut_overflowing: bool,
@@ -159,6 +163,7 @@ def write_lmdb(output_dir: str,
                              tokenizer_path,
                              target_tokenizer_path,
                              pretokenize,
+                             ensure_equal_length,
                              preprocessing_fn,
                              max_sequence_length,
                              cut_overflowing))
@@ -329,6 +334,7 @@ if __name__ == "__main__":
                tokenizer_path=tokenizer_path,
                target_tokenizer_path=target_tokenizer_path,
                pretokenize=CONFIG.pretokenize,
+               ensure_equal_length=CONFIG.ensure_equal_length,
                preprocessing_fn=preprocessing_fn,
                max_sequence_length=max_sequence_length,
                cut_overflowing=CONFIG.cut_overflowing,

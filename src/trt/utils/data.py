@@ -553,14 +553,14 @@ def _substring(length: int,
 
     def _preprocessing_fn(seq: PREPROCESSING_INPUT_OUTPUT) -> PREPROCESSING_INPUT_OUTPUT:
         def _sub(item: Dict[str, str]) -> Dict[str, str]:
-            assert "sequence" in item and "target_sequence" not in item
+            assert "sequence" in item
 
             if len(item["sequence"]) > length:
                 start_idx = rand.integers(0, len(item["sequence"]) - length + 1)
                 item["sequence"] = item["sequence"][start_idx:start_idx + length]
                 assert len(item["sequence"]) == length
 
-            return item
+            return {"sequence": item["sequence"]}
 
         if isinstance(seq, list):
             seq = [_sub(t.copy()) for t in seq]
@@ -948,7 +948,10 @@ def _tokenization_repair_corruption(iw_p: float = 0.2,
     return _corruption_fn
 
 
-def _tokenization_repair(use_labels: bool = False) -> PREPROCESSING_FN:
+def _tokenization_repair(
+        output_type: str = "label",
+        max_length: Optional[int] = None
+) -> PREPROCESSING_FN:
     """
 
     Special corruption function for the tokenization repair formulation.
@@ -956,21 +959,24 @@ def _tokenization_repair(use_labels: bool = False) -> PREPROCESSING_FN:
     and not the corrupted str in human readable form.
     (see corresponding tokenization repair tokenizer in model/tokenizer.py)
 
-    :param use_labels: whether to add targets as labels or as target sequence to item
+    :param output_type: one of {label, repair_token, char}
+    :param max_length: maximum length of input sequence
     :return: corruption function with signature CORRUPTION_FN
     """
+    assert output_type in {"label", "repair_token", "char"}
     repair_tokens = [
         TokenizationRepairTokens.KEEP_CHAR.value,
         TokenizationRepairTokens.INSERT_WS.value,
         TokenizationRepairTokens.DELETE_WS.value
     ]
+    if max_length is None:
+        max_length = float("inf")
 
     def _preprocessing_fn(seq: PREPROCESSING_INPUT_OUTPUT) -> PREPROCESSING_INPUT_OUTPUT:
         def _tok_repair(item: Dict[str, Any]) -> Dict[str, Any]:
             assert "sequence" in item and "target_sequence" in item
 
             sequence = nlp.clean_sequence(item["sequence"])
-            item["sequence"] = sequence
             target_sequence = nlp.clean_sequence(item["target_sequence"])
 
             # 0 --> kc, 1 --> iw, 2 --> dw
@@ -980,7 +986,11 @@ def _tokenization_repair(use_labels: bool = False) -> PREPROCESSING_FN:
             sequence_ptr = 0
             target_sequence_ptr = 0
 
-            while sequence_ptr < len(sequence) and target_sequence_ptr < len(target_sequence):
+            while (
+                    sequence_ptr < len(sequence)
+                    and target_sequence_ptr < len(target_sequence)
+                    and sequence_ptr < max_length
+            ):
                 char = sequence[sequence_ptr]
                 target_char = target_sequence[target_sequence_ptr]
 
@@ -991,9 +1001,7 @@ def _tokenization_repair(use_labels: bool = False) -> PREPROCESSING_FN:
 
                 elif char == " ":
                     labels.append(2)
-                    labels.append(0)
-                    sequence_ptr += 2
-                    target_sequence_ptr += 1
+                    sequence_ptr += 1
 
                 elif target_char == " ":
                     labels.append(1)
@@ -1005,19 +1013,28 @@ def _tokenization_repair(use_labels: bool = False) -> PREPROCESSING_FN:
 
             labels.append(0)
 
+            sequence = sequence[:sequence_ptr]
+            target_sequence = target_sequence[:target_sequence_ptr]
             assert target_sequence_ptr == len(target_sequence) and sequence_ptr == len(sequence)
 
-            assert len(labels) == len(sequence) + 2, f"sequence length {len(sequence)} " \
-                                                     f"and labels have length {len(labels)}, but" \
-                                                     f"expected length of labels to be equal to length of " \
-                                                     f"sequence + 2: \n{sequence}\n{labels}"
+            assert len(labels) == len(sequence) + 2, \
+                f"sequence length is {len(sequence)} " \
+                f"and labels have length {len(labels)}, but" \
+                f"expected length of labels to be equal to length of " \
+                f"sequence + 2: \n{sequence}\n{labels}"
 
-            if use_labels:
+            item["sequence"] = sequence
+
+            if output_type == "label":
                 item["labels"] = labels
                 item.pop("target_sequence", None)
-            else:
+            elif output_type == "repair_token":
                 item["target_sequence"] = "".join([repair_tokens[label] for label in labels[1:-1]])
                 item.pop("labels", None)
+            else:
+                item["target_sequence"] = target_sequence
+                item.pop("labels", None)
+                assert item["sequence"].replace(" ", "") == item["target_sequence"].replace(" ", "")
 
             return item
 
@@ -1035,7 +1052,6 @@ def _whitespace_corruption(iw_p: float = 0.2,
                            dw_p: float = 0.5,
                            no_ws: bool = False,
                            full_ws: bool = False,
-                           max_input_length: Optional[int] = None,
                            seed: int = 22) -> PREPROCESSING_FN:
     """
 
@@ -1046,7 +1062,6 @@ def _whitespace_corruption(iw_p: float = 0.2,
     :param dw_p: probability that a whitespace is deleted
     :param no_ws: if True, all whitespaces will be removed from sequence
     :param full_ws: if True, whitespaces will be inserted after every character in the sequence
-    :param max_input_length: restrict the maximum input sequence length
     :param seed: fix the random seed
     :return: corruption function with signature CORRUPTION_FN
     """

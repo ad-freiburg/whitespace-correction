@@ -133,9 +133,12 @@ class TransformerModel(nn.Module, EncoderMixin, DecoderMixin, InferenceMixin):
                                             input_ids=input_ids,
                                             bos_token_id=self.decoder.tokenizer.token_to_id(constants.BOS),
                                             eos_token_id=self.decoder.tokenizer.token_to_id(constants.EOS),
-                                            max_length=kwargs.pop("max_length",
-                                                                  min(self.encoder.config.max_num_embeddings,
-                                                                      self.decoder.config.max_num_embeddings)),
+                                            max_input_length=kwargs.get(
+                                                "max_input_length", self.encoder.config.max_num_embeddings
+                                            ),
+                                            max_output_length=kwargs.get(
+                                                "max_output_length", self.decoder.config.max_num_embeddings
+                                            ),
                                             device=self.device,
                                             method=kwargs.pop("inference_method", "greedy"),
                                             **kwargs)

@@ -7,11 +7,15 @@ import shutil
 import zipfile
 from typing import List, Union, Optional
 
-import numpy as np
 import requests
+import tokenizers
 import torch
 from tabulate import tabulate
 from tqdm import tqdm
+
+from src.trt.model.tokenizer import load_tokenizer
+from src.trt.utils import constants
+from src.trt.utils.inference import ScoreFn, DeTokFn, Beam, log_likelihood_score_fn
 
 _BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
 _NAME_TO_URL = {
@@ -165,3 +169,48 @@ def generate_report(
         return None
     else:
         return report
+
+
+def char2char_score_fn(char_tokenizer: tokenizers.Tokenizer) -> ScoreFn:
+    bos_token_id = char_tokenizer.token_to_id(constants.BOS)
+    eos_token_id = char_tokenizer.token_to_id(constants.EOS)
+    unk_token_id = char_tokenizer.token_to_id(constants.UNK)
+    ws_token_id = char_tokenizer.token_to_id(" ")
+
+    log_l_score = log_likelihood_score_fn()
+
+    def _score(beam: Beam, input_string: Optional[str] = None) -> float:
+        assert input_string is not None
+        assert beam.token_ids[0] == bos_token_id and len(beam.token_ids) > 1
+
+        pred_token_id = beam.token_ids[-1]
+        token_ids = beam.token_ids[1:-1]
+        prev_pred_token_id = token_ids[-1] if len(token_ids) > 0 else unk_token_id
+        assert all(token_id != bos_token_id and token_id != eos_token_id for token_id in token_ids)
+
+        input_str_no_spaces = input_string.replace(" ", "")
+        input_str_no_spaces_position = sum(token_id != ws_token_id for token_id in token_ids)
+
+        s = log_l_score(beam, None)
+
+        # only allow whitespaces (but not successively), input characters or eos
+        if input_str_no_spaces_position >= len(input_str_no_spaces):
+            # must be eos
+            if pred_token_id != eos_token_id:
+                s -= 1_000_000
+        else:
+            input_token_id = char_tokenizer.token_to_id(input_str_no_spaces[input_str_no_spaces_position])
+            if (
+                    # do not allow:
+                    # 1. two whitespaces in a row
+                    (pred_token_id == ws_token_id and prev_pred_token_id == ws_token_id)
+                    # 2. predicting something else than whitespace or input char
+                    or (pred_token_id != ws_token_id and pred_token_id != input_token_id)
+                    # 3. too early eos
+                    or pred_token_id == eos_token_id
+            ):
+                s -= 1_000_000
+
+        return s
+
+    return _score
