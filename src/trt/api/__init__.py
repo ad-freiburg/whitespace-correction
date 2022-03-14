@@ -237,7 +237,9 @@ class TokenizationRepairer:
                 if token_id != self.ws_token_id:
                     input_str_no_spaces_ptr += 1
 
-            assert output_str.replace(" ", "") == input_str_no_spaces, f"{input_str} --> {output_str}"
+            output_str_no_spaces = output_str.replace(" ", "")
+            assert output_str_no_spaces == input_str_no_spaces, \
+                f"{input_str} --> {output_str}\n{input_str_no_spaces}\n{output_str_no_spaces}"
             return output_str
 
     @torch.inference_mode()

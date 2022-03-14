@@ -13,15 +13,16 @@ import torch
 from tabulate import tabulate
 from tqdm import tqdm
 
-from src.trt.model.tokenizer import load_tokenizer
-from src.trt.utils import constants
-from src.trt.utils.inference import ScoreFn, DeTokFn, Beam, log_likelihood_score_fn
+from trt.utils import constants
+from trt.utils.inference import ScoreFn, Beam, log_likelihood_score_fn
 
 _BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
 _NAME_TO_URL = {
     "eo_arxiv_with_errors": f"{_BASE_URL}/eo_arxiv_with_errors.zip",
     "eo_small_arxiv_with_errors": f"{_BASE_URL}/eo_small_arxiv_with_errors.zip",
     "eo_medium_arxiv_with_errors": f"{_BASE_URL}/eo_medium_arxiv_with_errors.zip",
+    "nmt_medium_arxiv_with_errors": f"{_BASE_URL}/nmt_medium_arxiv_with_errors.zip",
+    "nmt_small_arxiv_with_errors": f"{_BASE_URL}/nmt_small_arxiv_with_errors.zip",
 }
 
 
