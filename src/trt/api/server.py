@@ -35,6 +35,8 @@ class TokenizationRepairers:
         logger.info(f"Found {num_devices} GPUs")
         self.timeout = timeout
         for i, model in enumerate(get_available_models()):
+            if model.name.startswith("nmt_medium"):
+                continue
             self.locks[model.name] = threading.Lock()
             if num_devices > 0:
                 self.streams[model.name] = torch.cuda.Stream()
@@ -108,9 +110,16 @@ def repair_text():
         else:
             repaired = tok_rep.repair_text(text)
     end = time.perf_counter()
-    logger.info(f"Repairing text with {len(text)} chars using model {model} took {end - start:.4f}s")
+    runtime = end - start
+    logger.info(f"Repairing text with {len(text)} chars using model {model} took {runtime:.4f}s")
     response = jsonify(
-        {"repaired_text": repaired}
+        {
+            "repaired_text": repaired,
+            "runtime": {
+                "total": runtime,
+                "cps": len(text) / runtime
+            }
+        }
     )
     return add_cors_header(response)
 
@@ -118,7 +127,9 @@ def repair_text():
 @server.route(f"{server_base_url}/repair_file", methods=["POST"])
 def repair_file():
     start = time.perf_counter()
-    text = request.form["text"]
+    text = request.form.get("text")
+    if text is None:
+        return abort(add_cors_header(Response(f"request missing 'text' field in form data", status=400)))
     text = [line.strip() for line in text.splitlines()]
     model = request.args.get("model", tok_repairers.default_model)
     with tok_repairers.get_repairer(model) as tok_rep:
@@ -129,10 +140,15 @@ def repair_file():
         else:
             repaired = tok_rep.repair_text(text)
     end = time.perf_counter()
-    logger.info(f"Repairing file with {sum(len(l) for l in text)} chars using model {model} took {end - start:.2f}s")
+    runtime = end - start
+    logger.info(f"Repairing file with {sum(len(l) for l in text)} chars using model {model} took {runtime:.2f}s")
     response = jsonify(
         {
-            "repaired_file": repaired
+            "repaired_file": repaired,
+            "runtime": {
+                "total": runtime,
+                "cps": sum(len(line) for line in text) / runtime
+            }
         }
     )
     return add_cors_header(response)

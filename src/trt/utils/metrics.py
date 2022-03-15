@@ -3,6 +3,7 @@ import math
 from abc import ABC
 from typing import Any, Callable, List, Optional, Tuple, Union, no_type_check, Set
 
+import numpy as np
 from editdistance import distance as ed
 
 import tokenizers
@@ -86,9 +87,11 @@ def sequence_accuracy(sequences: Union[List[str], torch.Tensor],
     return sum(equal) / max(len(equal), 1)
 
 
-def _tp_fp_fn_to_f1_prec_rec(tp: int, fp: int, fn: int) -> Tuple[float, float, float]:
+def _tp_fp_fn_to_f1_prec_rec(tp: int, fp: int, fn: int) -> Optional[Tuple[float, float, float]]:
     precision = tp / max(tp + fp, 1)
     recall = tp / max(tp + fn, 1)
+    if precision == 0 and recall == 0:
+        return None
     f1 = (2 * precision * recall) / (precision + recall) if precision + recall > 0 else 0
     return f1, precision, recall
 
@@ -103,10 +106,16 @@ def _insertions_and_deletions(repair_ops: List[int]) -> Set[Tuple[int, int]]:
 
 def tok_rep_f1_prec_rec(sequences: List[str],
                         target_sequences: List[str],
-                        input_sequences: List[str]) -> Tuple[float, float, float]:
+                        input_sequences: List[str],
+                        method: str = "micro") -> Tuple[float, float, float]:
+    assert method in {"micro", "macro"}
     tp = 0
     fp = 0
     fn = 0
+
+    f1s = []
+    precs = []
+    recs = []
 
     for seq, gt, ipt in zip(sequences, target_sequences, input_sequences):
         gt_ops = tokenization_repair.get_whitespace_operations(ipt, gt)
@@ -120,7 +129,23 @@ def tok_rep_f1_prec_rec(sequences: List[str],
         fp += len(pred_insertions_and_deletions.difference(gt_insertions_and_deletions))
         fn += len(gt_insertions_and_deletions.difference(pred_insertions_and_deletions))
 
-    return _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)
+        if method == "macro":
+            scores = _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)
+            if scores is not None:
+                f1, prec, rec = scores
+                f1s.append(f1)
+                precs.append(prec)
+                recs.append(rec)
+            tp = fp = fn = 0
+
+    if method == "macro":
+        return float(np.mean(f1s)), float(np.mean(precs)), float(np.mean(recs))
+    else:
+        scores = _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)
+        if scores is None:
+            return 0, 0, 0
+        else:
+            return scores
 
 
 def f1_prec_rec(sequences: List[str],
