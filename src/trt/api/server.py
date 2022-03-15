@@ -61,7 +61,7 @@ class TokenizationRepairers:
             acquired = self.locks[name].acquire(timeout=self.timeout)
             if not acquired:
                 # server capacity is maxed out when acquiring the model did not work within timeout range
-                yield f"too many requests, failed to acquire tokenization repairer " \
+                yield f"server is overloaded with too many requests, failed to reserve tokenization repair model " \
                       f"within the {self.timeout:.2f}s timeout limit", 503
             else:
                 if name in self.streams:

@@ -26,11 +26,10 @@
     <h3>or input text</h3>
     <textarea id="repair_text" aria-label="repair_text"
               style="width: 100%; height: 15%; margin: auto; resize: none">Rpai rth issente nse!</textarea>
-
-    <p id="repair_text_error" style="display: none; color: darkred"></p>
     <br>
     <br>
     <button id="repair_text_button" style="margin: auto;">Repair</button>
+    <p id="repair_text_error" style="display: none; color: darkred"></p>
     <br>
     <br>
     <div id="repair_text_spinner" style="display: none">
@@ -108,12 +107,7 @@
                     data: {"text": repair_text},
                     error: (xhr) => {
                         let status_code = xhr.status;
-                        let message;
-                        if (status_code === 503) {
-                            message = "server is overloaded, try again";
-                        } else {
-                            message = "unknown error";
-                        }
+                        let message = xhr.responseText;
                         repair_text_error.html(`error repairing text with status code ${status_code}: ${message}`);
                         repair_text_error.show();
                     },
