@@ -5,7 +5,7 @@ import platform
 import re
 import shutil
 import zipfile
-from typing import List, Union, Optional
+from typing import List, Union, Optional, Tuple
 
 import requests
 import tokenizers
@@ -126,6 +126,50 @@ def split(items: List, lengths: List[int]) -> List[List]:
     return split_items
 
 
+def sliding_windows(length: int, window_size: int) -> List[int]:
+    return list(range(0, length, window_size))
+
+
+def match_token_ids_ignoring_space_and_unk(
+        token_ids: List[int],
+        tokenizer: tokenizers.Tokenizer,
+        left_context: str,
+        window: str,
+        right_context: str
+) -> Tuple[int, int]:
+    left_context_pattern = r"\s*".join(
+        re.escape(char) if tokenizer.token_to_id(char) else "."
+        for char in left_context.replace(" ", "")
+    )
+    right_context_pattern = r"\s*".join(
+        re.escape(char) if tokenizer.token_to_id(char) else "."
+        for char in right_context.replace(" ", "")
+    )
+    window_pattern = r"\s*".join(
+        re.escape(char) if tokenizer.token_to_id(char) else "."
+        for char in window.replace(" ", "")
+    )
+    if window.startswith(" "):
+        window_pattern = r"(\s*" + window_pattern
+    else:
+        window_pattern = r"\s*(" + window_pattern
+    if window.endswith(" "):
+        window_pattern = window_pattern + r"\s*)"
+    else:
+        window_pattern = window_pattern + r")\s*"
+
+    unk_token_id = tokenizer.token_to_id(constants.UNK)
+    search_str = "".join(
+        tokenizer.id_to_token(token_id) if token_id != unk_token_id else "#"
+        for token_id in token_ids
+    )
+    pattern = re.compile(left_context_pattern + window_pattern + right_context_pattern)
+    match = pattern.search(search_str)
+    assert match is not None, f"could no match the following two strings:" \
+                              f"\n{left_context + window + right_context}\n{search_str}"
+    return match.start(1), match.end(1)
+
+
 def generate_report(
         task: str,
         model: str,
@@ -180,16 +224,14 @@ def char2char_score_fn(char_tokenizer: tokenizers.Tokenizer) -> ScoreFn:
 
     log_l_score = log_likelihood_score_fn()
 
-    def _score(beam: Beam, input_string: Optional[str] = None) -> float:
-        assert input_string is not None
+    def _score(beam: Beam, input_str_no_spaces: Optional[str] = None) -> float:
+        assert input_str_no_spaces is not None
         assert beam.token_ids[0] == bos_token_id and len(beam.token_ids) > 1
 
         pred_token_id = beam.token_ids[-1]
         token_ids = beam.token_ids[1:-1]
         prev_pred_token_id = token_ids[-1] if len(token_ids) > 0 else unk_token_id
-        assert all(token_id != bos_token_id and token_id != eos_token_id for token_id in token_ids)
 
-        input_str_no_spaces = input_string.replace(" ", "")
         input_str_no_spaces_position = sum(token_id != ws_token_id for token_id in token_ids)
 
         s = log_l_score(beam, None)
@@ -200,7 +242,9 @@ def char2char_score_fn(char_tokenizer: tokenizers.Tokenizer) -> ScoreFn:
             if pred_token_id != eos_token_id:
                 s -= 1_000_000
         else:
-            input_token_id = char_tokenizer.token_to_id(input_str_no_spaces[input_str_no_spaces_position])
+            input_token_id = char_tokenizer.token_to_id(
+                input_str_no_spaces[input_str_no_spaces_position]
+            ) or unk_token_id
             if (
                     # do not allow:
                     # 1. two whitespaces in a row

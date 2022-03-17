@@ -3,13 +3,20 @@ import math
 import os
 import pickle
 import pprint
-from typing import Union, List, Optional, Iterable
+from typing import Union, List, Optional, Iterable, Dict
 
 import numpy as np
 import torch
 from tqdm import tqdm
 
-from trt.api.utils import download_model, get_device_info, split, char2char_score_fn
+from trt.api.utils import (
+    download_model,
+    get_device_info,
+    split,
+    char2char_score_fn,
+    sliding_windows,
+    match_token_ids_ignoring_space_and_unk
+)
 from trt.model import transformer, tokenizer
 from trt.utils import common, config, io, inference, nlp, tokenization_repair, constants
 
@@ -111,6 +118,8 @@ class TokenizationRepairer:
         if (
                 self.cfg.model.type == "encoder_with_head"
                 and self.cfg.model.encoder.tokenizer == "char"
+                and self.cfg.model.head.type == "sequence_classification"
+                and self.cfg.model.head.arguments.get("num_classes", 0) == 3
         ):
             # set default inference kwargs
             self.inference_kwargs = {
@@ -159,57 +168,90 @@ class TokenizationRepairer:
                 "score_fn": char2char_score_fn(self.char_tokenizer)
             }
         else:
-            raise RuntimeError(f"model should either be of type encoder_with_head with a char encoder tokenizer "
-                               f"or of type transformer with both a char encoder and decoder tokenizer")
+            raise RuntimeError(f"model should either be of type encoder_with_head with a char encoder tokenizer and 3 "
+                               f"output classes or of type transformer with both a char encoder and decoder tokenizer")
 
         self.max_length = self.model.encoder.config.max_num_embeddings - 2  # - 2 because of bos and eos tokens
-        self.overlap = math.ceil(self.max_length / 2)
-        self.half_overlap_floor = 0  # to enable half_overlap_merging set this to math.floor(self.overlap / 2)
+        self.window_size = math.ceil(0.75 * self.max_length)
+        self.context_size = math.floor((self.max_length - self.window_size) / 2)
 
     def _merge_inference_results(
             self,
             inference_results: List[
-                Union[inference.SequenceGenerationInferenceResult,
-                      inference.SequenceClassificationInferenceResult]
+                Union[
+                    inference.SequenceGenerationInferenceResult,
+                    List[inference.SequenceGenerationInferenceResult],
+                    inference.SequenceClassificationInferenceResult
+                ]
             ],
-            start_positions: List[int]
+            input_str: str
     ) -> inference.InferenceResult:
         assert (
                 len(inference_results) > 0
-                and len(inference_results) == len(start_positions)
-                and sorted(start_positions) == start_positions
         )
-        if isinstance(inference_results[0], inference.SequenceGenerationInferenceResult):
-            assert len(inference_results) == 1
-            return inference_results[0]
 
-        elif isinstance(inference_results[0], list) and isinstance(inference_results[0][0],
-                                                                   inference.SequenceGenerationInferenceResult):
-            assert len(inference_results) == 1
-            return inference_results[0][0]
+        input_length = len(input_str)
+        if isinstance(inference_results[0], inference.SequenceClassificationInferenceResult):
+            if len(inference_results) == 1:
+                return inference_results[0]
 
-        elif len(inference_results) == 1:
-            return inference_results[0]
+            windows = sliding_windows(input_length, self.window_size)
+            assert len(inference_results) == len(windows)
 
-        num_merged_predictions = 2 + start_positions[-1] + self.max_length
-        merged_logits = np.zeros((num_merged_predictions, len(inference_results[0].logits[0])), dtype=float)
-        num_logit_updates = np.zeros((num_merged_predictions, 1), dtype=int)
-        for i, (start_pos, ir) in enumerate(zip(start_positions, inference_results)):
-            from_pos = start_pos + 1
-            if i > 0:
-                from_pos += self.half_overlap_floor
-            to_pos = start_pos + 1 + self.max_length
-            if i < len(inference_results) - 1:
-                to_pos -= self.half_overlap_floor
-            assert len(ir.logits) == self.max_length + 2
-            merged_logits[from_pos:to_pos] += ir.logits[from_pos - start_pos:to_pos - start_pos]
-            num_logit_updates[from_pos:to_pos] += 1
-        num_logit_updates[0] = 1  # bos token updates (to avoid dividing by zero)
-        num_logit_updates[-1] = 1  # eos token updates (to avoid dividing by zero)
-        assert np.all(num_logit_updates > 0)  # make sure every position got an update
-        merged_logits /= num_logit_updates
-        merged_predictions = np.argmax(merged_logits, axis=-1)
-        return inference.SequenceClassificationInferenceResult(merged_predictions.tolist(), merged_logits.tolist())
+            merged_predictions = np.full(input_length, fill_value=-1, dtype=int)
+            merged_logits = np.zeros((input_length, len(inference_results[0].logits[0])), dtype=float)
+            for i, (ir, window) in enumerate(zip(inference_results, windows)):
+                start_idx = 0 if i == 0 else self.context_size
+                predictions = ir.predictions[1:-1][start_idx:start_idx + self.window_size]
+                logits = ir.logits[1:-1][start_idx:start_idx + self.window_size]
+                merged_predictions[window: window + self.window_size] = predictions
+                merged_logits[window: window + self.window_size] = logits
+
+            assert np.all(merged_predictions >= 0)  # make sure everything was successful
+            # add bos eos predictions and logits again (all zeros because they are not used anyway)
+            merged_predictions = list(np.pad(merged_predictions, (1, 1)))
+            merged_logits = list(np.pad(merged_logits, ((1, 1), (0, 0))))
+            return inference.SequenceClassificationInferenceResult(merged_predictions, merged_logits)
+
+        else:
+            # we have a list of lists when beam search is used, only take the top beam (first) in this case
+            if isinstance(inference_results[0], list):
+                inference_results = [irs[0] for irs in inference_results]
+            if len(inference_results) == 1:
+                return inference_results[0]
+
+            windows = sliding_windows(input_length, self.window_size)
+            assert len(inference_results) == len(windows)
+
+            merged_token_ids = []
+            merged_log_probabilities = []
+            for i, (ir, window) in enumerate(zip(inference_results, windows)):
+                input_str_left_context = input_str[max(0, window - self.context_size):window]
+                input_str_window = input_str[window: window + self.window_size]
+                input_str_right_context = \
+                    input_str[window + self.window_size:
+                              window + self.window_size + self.context_size]
+                assert (
+                               ir.token_ids[0] == self.char_tokenizer.token_to_id(constants.BOS)
+                               and ir.token_ids[-1] == self.char_tokenizer.token_to_id(constants.EOS)
+                )
+                from_idx, to_idx = match_token_ids_ignoring_space_and_unk(
+                    ir.token_ids[1:-1],
+                    self.char_tokenizer,
+                    input_str_left_context,
+                    input_str_window,
+                    input_str_right_context
+                )
+                merged_token_ids.extend(ir.token_ids[1:-1][from_idx: to_idx])
+                merged_log_probabilities.extend(ir.token_log_probabilities[1:-1][from_idx: to_idx])
+
+            merged_token_ids = (
+                    [self.char_tokenizer.token_to_id(constants.BOS)]
+                    + merged_token_ids
+                    + [self.char_tokenizer.token_to_id(constants.EOS)]
+            )
+            merged_log_probabilities = [0.] + merged_log_probabilities + [0.]
+            return inference.SequenceGenerationInferenceResult(merged_token_ids, merged_log_probabilities)
 
     def _inference_result_to_str(
             self,
@@ -225,18 +267,22 @@ class TokenizationRepairer:
                 inference_result.predictions[1:-1]
             )
         else:
-            output_str = ""
+            output_chars = []
             input_str_no_spaces = input_str.replace(" ", "")
             input_str_no_spaces_ptr = 0
             for token_id in inference_result.token_ids[1:-1]:
-                char = (
-                    self.char_tokenizer.id_to_token(token_id) if token_id != self.unk_token_id
-                    else input_str_no_spaces[input_str_no_spaces_ptr]
-                )
-                output_str += char
-                if token_id != self.ws_token_id:
+                if token_id == self.ws_token_id:
+                    output_chars.append(" ")
+                else:
+                    char = (
+                        self.char_tokenizer.id_to_token(token_id) if token_id != self.unk_token_id
+                        else input_str_no_spaces[input_str_no_spaces_ptr]
+                    )
+                    output_chars.append(char)
                     input_str_no_spaces_ptr += 1
 
+            output_str = "".join(output_chars)
+            assert input_str_no_spaces_ptr == len(input_str_no_spaces)
             output_str_no_spaces = output_str.replace(" ", "")
             assert output_str_no_spaces == input_str_no_spaces, \
                 f"{input_str} --> {output_str}\n{input_str_no_spaces}\n{output_str_no_spaces}"
@@ -250,14 +296,33 @@ class TokenizationRepairer:
             sort_by_length: bool = True,
             show_progress: bool = False
     ) -> List[inference.InferenceResult]:
-        # maybe sort inputs
-        input_indices_and_lengths = [(i, len(ipt)) for i, ipt in enumerate(inputs)]
-        if sort_by_length:
-            input_indices_and_lengths = sorted(input_indices_and_lengths, key=lambda e: e[1], reverse=True)
+        # create batches, if an input sequence is too long, split it into multiple sequence using a sliding window
+        # approach
 
-        sum_lengths = sum(length for _, length in input_indices_and_lengths)
+        all_inference_results: Dict[int, List[inference.InferenceResult]] = {}
+        batches = []
+        for input_idx, ipt in enumerate(inputs):
+            length = len(ipt)
+            if length <= self.max_length:
+                batches.append((input_idx, 0, length, 0))
+                all_inference_results[input_idx] = [None]
+            else:
+                windows = sliding_windows(length, self.window_size)
+                for i, window in enumerate(windows):
+                    batches.append((
+                        input_idx,
+                        max(0, window - self.context_size),
+                        min(length, window + self.window_size + self.context_size),
+                        i
+                    ))
+                all_inference_results[input_idx] = [None] * len(windows)
+
+        if sort_by_length:
+            batches = sorted(batches, key=lambda e: e[2] - e[1], reverse=True)
+
+        sum_lengths = sum(to_ - from_ for _, from_, to_, _ in batches)
         pbar = tqdm(
-            range(0, len(inputs), batch_size),
+            list(range(0, len(batches), batch_size)),
             total=sum_lengths,
             ascii=True,
             leave=False,
@@ -265,57 +330,40 @@ class TokenizationRepairer:
             unit="char"
         )
 
-        all_inference_results: List[inference.InferenceResult] = [None] * len(inputs)  # type: ignore
         for i, batch_idx in enumerate(pbar):
-            batch_indices_and_lengths = input_indices_and_lengths[batch_idx: batch_idx + batch_size]
-            batch = []
-            batch_group_lengths = []
-            batch_start_positions = []
-            batch_length = 0
-            for idx, length in batch_indices_and_lengths:
-                batch_length += length
-
-                group_length = 1
-                batch_start_positions.append(0)
-                batch.append(inputs[idx][:self.max_length])
-
-                # split sequence into multiple sequences if it is longer than the specified max length
-                if length > self.max_length:
-                    start_pos = 0
-                    while start_pos + self.max_length < length:
-                        start_pos = min(start_pos + self.overlap, length - self.max_length)
-                        batch_start_positions.append(start_pos)
-                        batch.append(inputs[idx][start_pos:start_pos + self.max_length])
-                        group_length += 1
-
-                batch_group_lengths.append(group_length)
+            batch = batches[batch_idx: batch_idx + batch_size]
+            batch_sequences = [
+                inputs[input_idx][from_:to_]
+                for input_idx, from_, to_, _ in batch
+            ]
+            batch_length = sum(len(s) for s in batch_sequences)
 
             pbar.set_description(
-                f"[Batch {i + 1}] Repairing tokenization of {len(batch_indices_and_lengths):,} sequences "
+                f"[Batch {i + 1}] Repairing tokenization of {len(batch):,} sequences "
                 f"with {batch_length:,} characters in total"
             )
 
-            kwargs = {
-                "no_spaces": [" " not in ipt for ipt in batch],
-                "input_strings": batch
-            }
+            kwargs = {}
+            if self.cfg.model.type == "encoder_with_head":
+                kwargs["no_spaces"] = [" " not in ipt for ipt in batch]
+            else:
+                kwargs["input_strings"] = [seq.replace(" ", "") for seq in batch_sequences]
             # add inference keyword arguments to the model
             kwargs.update(self.inference_kwargs)
             batch_inference_results = self.model.inference(
-                batch,
+                batch_sequences,
                 **kwargs
             )
-            for (idx, _), inference_results, start_positions in zip(
-                    batch_indices_and_lengths,
-                    split(batch_inference_results, batch_group_lengths),
-                    split(batch_start_positions, batch_group_lengths)
+            for (input_idx, _, _, position), inference_result in zip(
+                    batch,
+                    batch_inference_results
             ):
-                all_inference_results[idx] = self._merge_inference_results(inference_results, start_positions)
+                all_inference_results[input_idx][position] = inference_result
 
             pbar.update(batch_length)
 
         pbar.close()
-        return all_inference_results
+        return [self._merge_inference_results(all_inference_results[i], inputs[i]) for i in range(len(inputs))]
 
     def repair_text(
             self,

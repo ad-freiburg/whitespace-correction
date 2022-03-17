@@ -104,11 +104,11 @@ def _insertions_and_deletions(repair_ops: List[int]) -> Set[Tuple[int, int]]:
     return insertions_and_deletions
 
 
-def tok_rep_f1_prec_rec(sequences: List[str],
-                        target_sequences: List[str],
-                        input_sequences: List[str],
-                        method: str = "micro") -> Tuple[float, float, float]:
-    assert method in {"micro", "macro"}
+def tok_rep_f1_prec_rec(
+        sequences: List[str],
+        target_sequences: List[str],
+        input_sequences: List[str]
+) -> Tuple[float, float, float, float, float, float]:
     tp = 0
     fp = 0
     fn = 0
@@ -125,27 +125,30 @@ def tok_rep_f1_prec_rec(sequences: List[str],
         gt_insertions_and_deletions = _insertions_and_deletions(gt_ops)
         pred_insertions_and_deletions = _insertions_and_deletions(pred_ops)
 
-        tp += len(gt_insertions_and_deletions.intersection(pred_insertions_and_deletions))
-        fp += len(pred_insertions_and_deletions.difference(gt_insertions_and_deletions))
-        fn += len(gt_insertions_and_deletions.difference(pred_insertions_and_deletions))
+        tp_ = len(gt_insertions_and_deletions.intersection(pred_insertions_and_deletions))
+        fp_ = len(pred_insertions_and_deletions.difference(gt_insertions_and_deletions))
+        fn_ = len(gt_insertions_and_deletions.difference(pred_insertions_and_deletions))
 
-        if method == "macro":
-            scores = _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)
-            if scores is not None:
-                f1, prec, rec = scores
-                f1s.append(f1)
-                precs.append(prec)
-                recs.append(rec)
-            tp = fp = fn = 0
+        tp += tp_
+        fp += fp_
+        fn += fn_
 
-    if method == "macro":
-        return float(np.mean(f1s)), float(np.mean(precs)), float(np.mean(recs))
+        scores = _tp_fp_fn_to_f1_prec_rec(tp_, fp_, fn_)
+        if scores is not None:
+            f1, prec, rec = scores
+            f1s.append(f1)
+            precs.append(prec)
+            recs.append(rec)
+
+    f1_mac, prec_mac, rec_mac = np.mean(f1s) or 0, np.mean(precs) or 0, np.mean(recs) or 0
+
+    scores = _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)
+    if scores is None:
+        f1_mic, prec_mic, rec_mic = 0, 0, 0
     else:
-        scores = _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)
-        if scores is None:
-            return 0, 0, 0
-        else:
-            return scores
+        f1_mic, prec_mic, rec_mic = scores
+
+    return f1_mic, prec_mic, rec_mic, f1_mac, prec_mac, rec_mac
 
 
 def f1_prec_rec(sequences: List[str],

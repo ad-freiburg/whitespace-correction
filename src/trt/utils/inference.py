@@ -1,6 +1,4 @@
-import math
 import queue
-import time
 from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple, Union
 
@@ -334,6 +332,7 @@ def batch_autoregressive_decode(model: nn.Module,
                                              memory_key_padding_mask=encoder_padding_mask_i)  # S x B x C
 
         # start_score = time.perf_counter()
+        # total_score = 0
         batch_indices = torch.where(indices_to_decode)[0].tolist()
         inferred_token_ids = []
         inferred_log_prob = []
@@ -341,27 +340,29 @@ def batch_autoregressive_decode(model: nn.Module,
             length = lengths[indices_to_decode][i]
             log_softmax_scores = torch.log_softmax(decoder_output[length - 1, i], dim=0)
 
-            min_log_p = math.log(1 / len(log_softmax_scores))
-
             batch_idx = batch_indices[i]
             beams_and_scores = []
+            current_log_probs = log_probs[batch_idx, :length].tolist()
+            current_token_ids = token_ids[batch_idx, :length].tolist()
             for token_id, lp in enumerate(log_softmax_scores.tolist()):
-                if lp < min_log_p:
-                    continue
                 beam = Beam(
-                    log_probabilities=log_probs[batch_idx, :length].tolist() + [lp],
-                    token_ids=token_ids[batch_idx, :length].tolist() + [token_id],
+                    log_probabilities=current_log_probs + [lp],
+                    token_ids=current_token_ids + [token_id],
                     eos=token_id == eos_token_id
                 )
+                # start_score2 = time.perf_counter()
                 beams_and_scores.append(
                     (beam, -score_fn(beam, input_strings[batch_idx] if input_strings is not None else None))
                 )
+                # end_score2 = time.perf_counter()
+                # total_score += (end_score2 - start_score2) * 1000
             beams_and_scores = sorted(beams_and_scores, key=lambda e: e[1])
             selected_beam = select_fn(beams_and_scores)
             inferred_token_ids.append(selected_beam.token_ids[-1])
             inferred_log_prob.append(selected_beam.log_probabilities[-1])
 
         # end_score = time.perf_counter()
+        # print(f"scoring beams2 took {total_score}ms")
         # print(f"scoring beams took {(end_score - start_score) * 1000}ms")
 
         inferred_token_ids = torch.tensor(
