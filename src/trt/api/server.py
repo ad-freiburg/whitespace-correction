@@ -15,7 +15,7 @@ from ..utils import common
 cli.show_server_banner = lambda *_: None
 os.environ["FLASK_ENV"] = "development"
 server = Flask(__name__)
-server.config["MAX_CONTENT_LENGTH"] = 2 * 1000 * 1000  # 2MB max file size
+server.config["MAX_CONTENT_LENGTH"] = 1 * 1000 * 1000  # 1MB max file size
 server_base_url = os.environ.get("BASE_URL", "")
 flask_logger = logging.getLogger("werkzeug")
 flask_logger.disabled = True
@@ -35,8 +35,6 @@ class TokenizationRepairers:
         logger.info(f"Found {num_devices} GPUs")
         self.timeout = timeout
         for i, model in enumerate(get_available_models()):
-            if model.name.startswith("nmt_medium"):
-                continue
             self.locks[model.name] = threading.Lock()
             if num_devices > 0:
                 self.streams[model.name] = torch.cuda.Stream()
@@ -75,7 +73,8 @@ class TokenizationRepairers:
 tok_repairers = TokenizationRepairers()
 
 
-def add_cors_header(response: Response) -> Response:
+@server.after_request
+def after_request(response: Response) -> Response:
     response.headers.add("Access-Control-Allow-Origin", os.environ.get("CORS_ORIGIN", "*"))
     return response
 
@@ -91,7 +90,7 @@ def get_models():
             "default": tok_repairers.default_model
         }
     )
-    return add_cors_header(response)
+    return response
 
 
 @server.route(f"{server_base_url}/repair_text", methods=["GET"])
@@ -100,13 +99,13 @@ def repair_text():
     text = request.args.get("text")
     if text is None:
         # text is a required field, send bad request as status code
-        return abort(add_cors_header(Response("required query parameter \"text\" is missing", status=400)))
+        return abort(Response("required query parameter \"text\" is missing", status=400))
     model = request.args.get("model", tok_repairers.default_model)
     with tok_repairers.get_repairer(model) as tok_rep:
         if isinstance(tok_rep, tuple):
             message, status_code = tok_rep
             logger.warning(f"Repairing text aborted with status {status_code}: {message}")
-            return abort(add_cors_header(Response(message, status=status_code)))
+            return abort(Response(message, status=status_code))
         else:
             repaired = tok_rep.repair_text(text)
     end = time.perf_counter()
@@ -121,7 +120,7 @@ def repair_text():
             }
         }
     )
-    return add_cors_header(response)
+    return response
 
 
 @server.route(f"{server_base_url}/repair_file", methods=["POST"])
@@ -129,14 +128,14 @@ def repair_file():
     start = time.perf_counter()
     text = request.form.get("text")
     if text is None:
-        return abort(add_cors_header(Response(f"request missing 'text' field in form data", status=400)))
+        return abort(Response(f"request missing 'text' field in form data", status=400))
     text = [line.strip() for line in text.splitlines()]
     model = request.args.get("model", tok_repairers.default_model)
     with tok_repairers.get_repairer(model) as tok_rep:
         if isinstance(tok_rep, tuple):
             message, status_code = tok_rep
             logger.warning(f"Repairing file aborted with status {status_code}: {message}")
-            return abort(add_cors_header(Response(message, status=status_code)))
+            return abort(Response(message, status=status_code))
         else:
             repaired = tok_rep.repair_text(text)
     end = time.perf_counter()
@@ -151,7 +150,7 @@ def repair_file():
             }
         }
     )
-    return add_cors_header(response)
+    return response
 
 
 def run_flask_server(host: str, port: int, timeout: float = 10) -> None:
