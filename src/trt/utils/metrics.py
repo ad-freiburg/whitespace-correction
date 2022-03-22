@@ -87,12 +87,13 @@ def sequence_accuracy(sequences: Union[List[str], torch.Tensor],
     return sum(equal) / max(len(equal), 1)
 
 
-def _tp_fp_fn_to_f1_prec_rec(tp: int, fp: int, fn: int) -> Optional[Tuple[float, float, float]]:
-    precision = tp / max(tp + fp, 1)
-    recall = tp / max(tp + fn, 1)
-    if precision == 0 and recall == 0:
-        return None
-    f1 = (2 * precision * recall) / (precision + recall) if precision + recall > 0 else 0
+def _tp_fp_fn_to_f1_prec_rec(tp: int, fp: int, fn: int) -> Tuple[Optional[float], Optional[float], Optional[float]]:
+    # when there are no true positives, precision and recall are zero and f1 is undefined
+    if tp == 0:
+        return None, None, None
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    f1 = (2 * precision * recall) / (precision + recall)
     return f1, precision, recall
 
 
@@ -107,8 +108,10 @@ def _insertions_and_deletions(repair_ops: List[int]) -> Set[Tuple[int, int]]:
 def tok_rep_f1_prec_rec(
         sequences: List[str],
         target_sequences: List[str],
-        input_sequences: List[str]
+        input_sequences: List[str],
+        mode: str = "insertions_and_deletions"
 ) -> Tuple[float, float, float, float, float, float]:
+    assert mode in {"insertions_and_deletions", "insertions", "deletions"}
     tp = 0
     fp = 0
     fn = 0
@@ -125,6 +128,13 @@ def tok_rep_f1_prec_rec(
         gt_insertions_and_deletions = _insertions_and_deletions(gt_ops)
         pred_insertions_and_deletions = _insertions_and_deletions(pred_ops)
 
+        if mode == "insertions":
+            gt_insertions_and_deletions = set(filter(lambda e: e[1] == 1, gt_insertions_and_deletions))
+            pred_insertions_and_deletions = set(filter(lambda e: e[1] == 1, pred_insertions_and_deletions))
+        elif mode == "deletions":
+            gt_insertions_and_deletions = set(filter(lambda e: e[1] == 2, gt_insertions_and_deletions))
+            pred_insertions_and_deletions = set(filter(lambda e: e[1] == 2, pred_insertions_and_deletions))
+
         tp_ = len(gt_insertions_and_deletions.intersection(pred_insertions_and_deletions))
         fp_ = len(pred_insertions_and_deletions.difference(gt_insertions_and_deletions))
         fn_ = len(gt_insertions_and_deletions.difference(pred_insertions_and_deletions))
@@ -134,21 +144,16 @@ def tok_rep_f1_prec_rec(
         fn += fn_
 
         scores = _tp_fp_fn_to_f1_prec_rec(tp_, fp_, fn_)
-        if scores is not None:
+        if not all(s is None for s in scores):
             f1, prec, rec = scores
             f1s.append(f1)
             precs.append(prec)
             recs.append(rec)
 
-    f1_mac, prec_mac, rec_mac = np.mean(f1s) or 0, np.mean(precs) or 0, np.mean(recs) or 0
+    f1_seq, prec_seq, rec_seq = np.mean(f1s) if f1s else 0, np.mean(precs) if precs else 0, np.mean(recs) if recs else 0
+    f1_mic, prec_mic, rec_mic = _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)
 
-    scores = _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)
-    if scores is None:
-        f1_mic, prec_mic, rec_mic = 0, 0, 0
-    else:
-        f1_mic, prec_mic, rec_mic = scores
-
-    return f1_mic, prec_mic, rec_mic, f1_mac, prec_mac, rec_mac
+    return f1_mic or 0, prec_mic or 0, rec_mic or 0, f1_seq, prec_seq, rec_seq
 
 
 def f1_prec_rec(sequences: List[str],

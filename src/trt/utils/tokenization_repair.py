@@ -56,7 +56,8 @@ def get_whitespace_operations(from_sequence: str, to_sequence: str) -> List[int]
 
         else:
             raise ValueError(f"Should not happen, from_char is {from_char} and to_char is {to_char}. Make sure the"
-                             f" input sequences only differ in whitespaces.")
+                             f" input sequences only differ in whitespaces:\n"
+                             f"{from_sequence.replace(' ', '')}\n!==\n{to_sequence.replace(' ', '')}")
 
     assert len(repair_tokens) == len(from_sequence)
 

@@ -13,8 +13,6 @@ pip install .
 # alternatively, if you also want to train your own models
 pip install .[train]
 
-# additionally, if you also want to run the demo
-pip install -r tokenization_repair/requirements.txt
 ```
 
 ### Usage
@@ -156,7 +154,6 @@ configs -> (example yaml config files for data preprocessing, models and trainin
 trt -> (library code used by this project)
 tests -> (unit tests for trt library)
 tokenization_repair -> (actual tokenization repair project directory)
-    demo        -> (tokenization repair streamlit demo)
     benchmark   -> (benchmarks, benchmark results and functionality to run and evaluate benchmarks)
     configs     -> (yaml config files used to preprocess data and 
                     train the tokenization repair models)

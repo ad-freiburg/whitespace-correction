@@ -18,9 +18,10 @@ from trt.utils.inference import ScoreFn, Beam, log_likelihood_score_fn
 
 _BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
 _NAME_TO_URL = {
-    "eo_arxiv_with_errors": f"{_BASE_URL}/eo_arxiv_with_errors.zip",
+    "eo_large_arxiv_with_errors": f"{_BASE_URL}/eo_large_arxiv_with_errors.zip",
     "eo_small_arxiv_with_errors": f"{_BASE_URL}/eo_small_arxiv_with_errors.zip",
     "eo_medium_arxiv_with_errors": f"{_BASE_URL}/eo_medium_arxiv_with_errors.zip",
+    "nmt_large_arxiv_with_errors": f"{_BASE_URL}/nmt_large_arxiv_with_errors.zip",
     "nmt_medium_arxiv_with_errors": f"{_BASE_URL}/nmt_medium_arxiv_with_errors.zip",
     "nmt_small_arxiv_with_errors": f"{_BASE_URL}/nmt_small_arxiv_with_errors.zip",
 }
@@ -205,6 +206,7 @@ def generate_report(
     if file_path is not None:
         if os.path.dirname(file_path):
             os.makedirs(os.path.dirname(file_path), exist_ok=True)
+
         exists = os.path.exists(file_path)
         with open(file_path, "a" if exists else "w", encoding="utf8") as of:
             if exists:

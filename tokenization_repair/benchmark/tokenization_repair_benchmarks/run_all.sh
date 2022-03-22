@@ -17,9 +17,7 @@ EXPERIMENTS=$(echo ${base_dir}/../../experiments/*)
 
 EXP_REGEX=${EXP_REGEX:-"*"}
 
-echo "Enter device string to use (e.g. 'cpu' or 'cuda'):"
-
-read device_string
+BENCHMARK_REGEX=${BENCHMARK_REGEX:-"*"}
 
 for exp in $EXPERIMENTS
 do
@@ -39,11 +37,11 @@ do
 
   test_benchmarks=${benchmarks}/${BENCHMARK:-*}/test/corrupt.txt
 
-#  python ${base_dir}/../run.py --experiment $exp -bs ${BATCH_SIZE:-16} -sb -d ${device_string} -sp \
-#    -tr --benchmarks ${test_benchmarks} --output-dir ${results} \
-#    --save-markdown-dir ${base_dir}/${split}_runtime_tables --model-name ${model_name}
   for benchmark in $test_benchmarks
   do
+    if [[ $benchmark != $BENCHMARK_REGEX ]]; then
+      continue
+    fi
     trt -e $exp \
     -f $benchmark \
     -o ${results}/$(dirname $(realpath $benchmark --relative-to $benchmarks))/${model_name}.txt

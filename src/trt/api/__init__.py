@@ -30,7 +30,7 @@ ModelInfo = collections.namedtuple("ModelInfo", ["name", "description"])
 def get_available_models() -> List[ModelInfo]:
     return [
         ModelInfo(
-            name="eo_arxiv_with_errors",
+            name="eo_large_arxiv_with_errors",
             description="best overall model, use this for text that might have OCR or spelling errors (default)"
         ),
         ModelInfo(
@@ -44,6 +44,10 @@ def get_available_models() -> List[ModelInfo]:
             description="smallest and fastest, but also the least accurate model, "
                         "use this when you want to repair text with few tokenization errors and "
                         "little to no OCR or spelling errors fast"
+        ),
+        ModelInfo(
+            name="nmt_large_arxiv_with_errors",
+            description="nmt model, similar in size to eo_large_arxiv_with_errors"
         ),
         ModelInfo(
             name="nmt_medium_arxiv_with_errors",

@@ -22,7 +22,7 @@ def evaluate(
         groundtruth_file: str,
         predicted_file: str,
         corrupted_file: str
-) -> Tuple[float, float, float, float, float, float]:
+) -> Tuple[float, ...]:
     groundtruths = []
     predictions = []
     corrupted = []
@@ -37,12 +37,14 @@ def evaluate(
     assert len(predictions) == len(groundtruths) and len(groundtruths) == len(corrupted)
 
     # f1, precision, recall = metrics.f1_prec_rec(predictions, groundtruths)
-    tok_f1, tok_precision, tok_recall = metrics.tok_rep_f1_prec_rec(predictions, groundtruths, corrupted)
+    mic_f1, mic_precision, mic_recall, mac_f1, mac_precision, mac_recall = metrics.tok_rep_f1_prec_rec(
+        predictions, groundtruths, corrupted
+    )
     seq_acc = metrics.sequence_accuracy(predictions, groundtruths)
     mned = metrics.mean_normalized_sequence_edit_distance(predictions, groundtruths)
     med = metrics.mean_sequence_edit_distance(predictions, groundtruths)
 
-    return seq_acc, mned, med, tok_f1, tok_precision, tok_recall
+    return seq_acc, mned, med, mic_f1, mic_precision, mic_recall, mac_f1, mac_precision, mac_recall
 
 
 if __name__ == "__main__":
@@ -71,16 +73,25 @@ if __name__ == "__main__":
 
             model_name, _ = os.path.splitext(predicted_path[-1])
 
-            seq_acc, mned, med, f1, prec, rec = evaluate(groundtruth_file, predicted_file, corrupted_file)
+            seq_acc, mned, med, f1_mic, prec_mic, rec_mic, f1_mac, prec_mac, rec_mac = evaluate(
+                groundtruth_file, predicted_file, corrupted_file
+            )
 
-            benchmark_results.append([model_name, seq_acc, mned, med, f1, prec, rec])
+            benchmark_results.append(
+                [model_name, seq_acc, mned, med, f1_mic, prec_mic, rec_mic, f1_mac, prec_mac, rec_mac]
+            )
 
         benchmark_results = sorted(benchmark_results, key=lambda r: r[1], reverse=True)
 
-        results_table = tabulate(benchmark_results,
-                                 headers=["Model", "Sequence accuracy", "MNED",
-                                          "MED", "F1", "Precision", "Recall"],
-                                 tablefmt="pipe")
+        results_table = tabulate(
+            benchmark_results,
+            headers=[
+                "Model", "Sequence accuracy", "MNED",
+                "MED", "F1_mic", "Precision_mic", "Recall_mic",
+                "F1_mac", "Precision_mac", "Recall_mac"
+            ],
+            tablefmt="pipe"
+        )
 
         logger.info(f"Benchmark: {groundtruth_name}, {groundtruth_split}:\n{results_table}\n")
 
