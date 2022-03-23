@@ -113,17 +113,21 @@
                     },
                     success: (data) => {
                         let repaired_string = "";
+                        let total_chars = 0;
                         for (const line of data["repaired_file"]) {
                             repaired_string += line + "\n";
+                            total_chars += line.length;
                         }
                         repaired_text.val(repaired_string);
                         repaired_text.show();
                         let end = performance.now();
+
+                        let cps = Math.round(data["runtime"]["cps"]);
                         $("#repaired_text_runtime").text(
                             `Client total: ${((end - start) / 1000).toFixed(2)}s,
                             Server total: ${data["runtime"]["total"].toFixed(2)}s,
-                            Server char/s: ${data["runtime"]["cps"].toFixed(2)}
-                            `
+                            Server char/s: ${cps.toLocaleString("en")}
+                            (total chars: ${total_chars.toLocaleString("en")})`
                         );
                         repaired_text_runtime_container.show();
                     },

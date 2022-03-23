@@ -77,6 +77,7 @@ if __name__ == "__main__":
         # baselines
         "google",
         "wordsegment",
+        "do_nothing",
         # encoder only
         "eo_large_arxiv_with_errors",
         "eo_medium_arxiv_with_errors",
@@ -92,6 +93,7 @@ if __name__ == "__main__":
 
     horizontal_lines = [
         # baselines
+        False,
         False,
         True,
         # encoder only
