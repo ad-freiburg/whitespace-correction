@@ -10,10 +10,9 @@ from typing import List, Union, Optional, Tuple
 import requests
 import tokenizers
 import torch
-from tabulate import tabulate
 from tqdm import tqdm
 
-from trt.utils import constants
+from trt.utils import constants, tables
 from trt.utils.inference import ScoreFn, Beam, log_likelihood_score_fn
 
 _BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
@@ -183,25 +182,24 @@ def generate_report(
 ) -> Optional[str]:
     input_size = len(inputs)
     input_size_chars = sum(len(ipt) for ipt in inputs)
-    report = tabulate(
-        [
+    report = tables.generate_table(
+        header=[
+            "Task", "Model", "Input size", "Runtime in seconds", "Seq/s", "kChar/s", "Batch size", "Sorted", "Device"
+        ],
+        data=[
             [
                 task,
                 model,
                 f"{input_size:,} sequences, {input_size_chars:,} chars",
-                runtime,
-                input_size / runtime,
-                input_size_chars / runtime,
+                f"{runtime:.1f}",
+                f"{input_size / runtime:.1f}",
+                f"{input_size_chars / (runtime * 1000):.2f}",
                 batch_size,
                 "yes" if sort_by_length else "no",
                 f"{torch.cuda.get_device_name(device)}, {get_cpu_info()}" if device.type == "cuda" else get_cpu_info()
             ]
         ],
-        headers=[
-            "Task", "Model", "Input size", "Runtime in seconds", "Seq/s", "Char/s", "Batch size", "Sorted", "Device"
-        ],
-        floatfmt=[None, None, None, ".3f", ".2f", ".2f", None, None, None, None],
-        tablefmt="pipe"
+        fmt="markdown"
     )
     if file_path is not None:
         if os.path.dirname(file_path):

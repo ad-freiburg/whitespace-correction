@@ -1,9 +1,11 @@
 import contextlib
+import json
 import logging
 import os
+import pprint
 import threading
 import time
-from typing import Union, Optional, Tuple
+from typing import Union, Optional, Tuple, List
 
 import torch.cuda
 from flask import Flask, abort, jsonify, request, cli, Response
@@ -30,20 +32,20 @@ class TokenizationRepairers:
         self.loaded = False
         self.default_model = ""
 
-    def init(self, timeout: float) -> None:
+    def init(self, models: List[str], timeout: float) -> None:
         num_devices = torch.cuda.device_count()
         logger.info(f"Found {num_devices} GPUs")
         self.timeout = timeout
-        for i, model in enumerate(get_available_models()):
-            self.locks[model.name] = threading.Lock()
+        for i, model in enumerate(models):
+            self.locks[model] = threading.Lock()
             if num_devices > 0:
-                self.streams[model.name] = torch.cuda.Stream()
-                tok_rep = TokenizationRepairer.from_pretrained(model.name, i % num_devices)
+                self.streams[model] = torch.cuda.Stream()
+                tok_rep = TokenizationRepairer.from_pretrained(model, i % num_devices)
             else:
-                tok_rep = TokenizationRepairer.from_pretrained(model.name, "cpu")
-            self.__setattr__(model.name, tok_rep)
+                tok_rep = TokenizationRepairer.from_pretrained(model, "cpu")
+            self.__setattr__(model, tok_rep)
             if i == 0:
-                self.default_model = model.name
+                self.default_model = model
         self.loaded = True
 
     @contextlib.contextmanager
@@ -153,9 +155,22 @@ def repair_file():
     return response
 
 
-def run_flask_server(host: str, port: int, timeout: float = 10) -> None:
-    logger.info("About to start server, loading all available tokenization repair models before starting")
-    tok_repairers.init(timeout=timeout)
-    logger.info(f"Set the timeout to acquire a model to {timeout:.4f} seconds")
-    logger.info("Starting server...")
+def run_flask_server(config_path: str) -> None:
+    if not os.path.exists(config_path):
+        raise RuntimeError(f"server config file {config_path} does not exist")
+
+    with open(config_path, "r", encoding="utf8") as cfg_file:
+        config = json.load(cfg_file)
+
+    assert "host" in config and "port" in config, "'host' and 'port' are required keys in the server config file"
+    host = config["host"]
+    port = config["port"]
+
+    timeout = config.get("timeout", 10)
+    models = config.get("models", [model.name for model in get_available_models()])
+    logger.info(f"Loaded config for server:\n{pprint.pformat(config)}")
+
+    tok_repairers.init(models=models, timeout=timeout)
+
+    logger.info(f"Starting server on {host}:{port}...")
     server.run(host, port, debug=False, use_reloader=False)

@@ -73,13 +73,13 @@ trt -f path/to/input/file.txt -o output.txt
 # where your input will be repaired and printed back out
 trt -i
 
-# start a tokenization repair server on <host>:<port> with the following endpoints:
-### <host>:<port>/models [GET] --> list available models as json 
-### <host>:<port>/repair_text?text=texttorepair [GET] --> repaired text as json
-### <host>:<port>/repair_file [POST] --> repaired file as json
+# start a tokenization repair server with the following endpoints:
+### /models [GET] --> list available models as json 
+### /repair_text?text=texttorepair [GET] --> repaired text as json
+### /repair_file [POST] --> repaired file as json
 ### To specify which model to use, you can use the model query parameter 
-### (e.g. <host>:<port>/repair_file?model=eo_small_arxiv_with_errors), default model is eo_arxiv_with_errors
-trt --server localhost:12345
+### (e.g. /repair_file?model=eo_small_arxiv_with_errors), default model is eo_large_arxiv_with_errors
+trt --server <config_file>
 
 ### OPTIONS
 ### Pass the following flags to the trt command to customize its behaviour
@@ -101,6 +101,14 @@ trt --server localhost:12345
 > Note: Loading the tokenization repair model requires an initial startup time each time you
 > invoke the `trt` command. CPU startup time is around 1s, GPU startup time around 3.5s, so for small
 > inputs or files you should probably pass the `-c` flag to force CPU execution for best performance.
+
+> Note: The server configuration file must contain a json object with the following keys:
+> - host (str, required)
+> - port (int, required)
+> - timeout (float, optional, by default timeout is set to 10 seconds)
+> - models (list of str, optional, by default all models will be served)
+> 
+> See [configs/server.json](configs/server.json) for an exemplary server configuration file
 
 ### Documentation
 
@@ -185,6 +193,6 @@ If you e.g. have some text files you want to repair using the pretrained models 
 contains the text files. Then inside the container you can repair them
 with `trt -f /text_files/file_1.txt -o /text_files/file_1_repaired.txt`.
 
-You can also start a tokenization repair server inside the container using `trt --server 0.0.0.0:<port>`. Keep in mind
+You can also start a tokenization repair server inside the container using `trt --server <config_file>`. Keep in mind
 that if you want to access the server from outside the container you have to expose the port using
-`docker run --gpus all -p <outside_port>:<port> -it tokenization_repair_transformers`.
+`docker run --gpus all -p <outside_port>:<server_port> -it tokenization_repair_transformers`.
