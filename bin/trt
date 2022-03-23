@@ -164,6 +164,7 @@ def run(args: argparse.Namespace) -> None:
             force_download=args.force_download
         )
 
+    torch.cuda.reset_peak_memory_stats(tok_rep.device)
     start = time.perf_counter()
     if args.repair is not None:
         print(tok_rep.repair_text(args.repair))
@@ -184,6 +185,7 @@ def run(args: argparse.Namespace) -> None:
             generate_report(
                 "tokenization repair",
                 tok_rep.model_name,
+                tok_rep.model,
                 lines,
                 time.perf_counter() - start,
                 args.batch_size,
@@ -191,6 +193,7 @@ def run(args: argparse.Namespace) -> None:
                 tok_rep.device,
                 file_path=args.report
             )
+
     elif args.interactive:
         while True:
             try:
@@ -222,10 +225,12 @@ def run(args: argparse.Namespace) -> None:
                         show_progress=args.progress
                 ):
                     print(repaired_line)
+
                 if args.report:
                     generate_report(
                         "tokenization repair",
                         tok_rep.model_name,
+                        tok_rep.model,
                         lines,
                         time.perf_counter() - start,
                         args.batch_size,
@@ -233,6 +238,7 @@ def run(args: argparse.Namespace) -> None:
                         tok_rep.device,
                         file_path=args.report
                     )
+
         except BrokenPipeError:
             return
         except Exception as e:

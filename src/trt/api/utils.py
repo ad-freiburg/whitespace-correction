@@ -12,10 +12,11 @@ import requests
 import tokenizers
 
 import torch
+from torch import nn
 
 from tqdm import tqdm
 
-from trt.utils import constants, tables
+from trt.utils import common, constants, tables
 from trt.utils.inference import Beam, ScoreFn, log_likelihood_score_fn
 
 _BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
@@ -175,7 +176,8 @@ def match_token_ids_ignoring_space_and_unk(
 
 def generate_report(
         task: str,
-        model: str,
+        model_name: str,
+        model: nn.Module,
         inputs: List[str],
         runtime: float,
         batch_size: int,
@@ -187,17 +189,29 @@ def generate_report(
     input_size_chars = sum(len(ipt) for ipt in inputs)
     report = tables.generate_table(
         header=[
-            "Task", "Model", "Input size", "Runtime in seconds", "Seq/s", "kChar/s", "Batch size", "Sorted", "Device"
+            "Task",
+            "Model",
+            "Input size",
+            "Runtime in seconds",
+            "Seq/s",
+            "kChar/s",
+            "MiB GPU memory",
+            "Mio. parameters",
+            "Batch size",
+            "Sorted",
+            "Device"
         ],
         data=[
             [
                 task,
-                model,
+                model_name,
                 f"{input_size:,} sequences, {input_size_chars:,} chars",
                 f"{runtime:.1f}",
                 f"{input_size / runtime:.1f}",
-                f"{input_size_chars / (runtime * 1000):.2f}",
-                batch_size,
+                f"{input_size_chars / (runtime * 1000):.1f}",
+                f"{torch.cuda.max_memory_reserved(device) // (1024 ** 2):,}" if device.type == "cuda" else "-",
+                f"{common.get_num_parameters(model)['total'] / (1000 ** 2):,.1f}",
+                str(batch_size),
                 "yes" if sort_by_length else "no",
                 f"{torch.cuda.get_device_name(device)}, {get_cpu_info()}" if device.type == "cuda" else get_cpu_info()
             ]

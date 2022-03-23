@@ -18,9 +18,11 @@ def generate_table(
 
     if alignments is None:
         alignments = ["left"] + ["right"] * (len(header) - 1)
-    if horizontal_lines is None:
+
+    if horizontal_lines is None or fmt == "markdown":
         horizontal_lines = [False] * len(data)
-    horizontal_lines[-1] = True  # always a horizontal line after last line
+    horizontal_lines[-1] = fmt == "latex"  # always a horizontal line after last line for latex, but not for markdown
+
     if bold_cells is None:
         bold_cells = [[False] * len(item) for item in data]
     else:
