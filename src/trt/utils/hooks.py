@@ -1,6 +1,6 @@
 import copy
 from collections import defaultdict
-from typing import Any, Dict, List, no_type_check
+from typing import Any, Dict, List, no_type_check, Type, Union, Tuple
 
 import numpy as np
 
@@ -10,7 +10,7 @@ from torch import nn
 
 class SaveHook:
     def __init__(self) -> None:
-        self.saved: List[torch.Tensor] = []
+        self.saved: List[Any] = []
 
     @no_type_check
     def __call__(self, *args: Any, **kwargs: Any) -> None:
@@ -21,18 +21,18 @@ class SaveHook:
 
 
 class SaveInputHook(SaveHook):
-    def __call__(self, module: nn.Module, inputs: torch.Tensor) -> None:
-        self.saved.append(inputs[0].cpu().detach())
+    def __call__(self, module: nn.Module, *args: Any) -> None:
+        self.saved.append(args)
 
 
 class SaveOutputHook(SaveHook):
-    def __call__(self, module: nn.Module, inputs: torch.Tensor, outputs: torch.Tensor) -> None:
-        self.saved.append(outputs.cpu().detach())
+    def __call__(self, module: nn.Module, inputs: Any, outputs: Any) -> None:
+        self.saved.append(outputs)
 
 
 class AttentionWeightsHook(SaveOutputHook):
-    def __call__(self, module: nn.Module, inputs: torch.Tensor, outputs: torch.Tensor) -> None:
-        self.saved.append(outputs[1].cpu().detach())
+    def __call__(self, module: nn.Module, _: Any, outputs: Tuple[torch.Tensor, torch.Tensor]) -> None:
+        self.saved.append(outputs[1])
 
 
 class ModelHook:
@@ -49,8 +49,8 @@ class ModelHook:
     def attach(self,
                name: str,
                model: nn.Module,
-               hook: SaveOutputHook,
-               attach_to_cls: nn.Module,
+               hook: Union[SaveOutputHook, SaveInputHook],
+               attach_to_cls: Type[nn.Module],
                layer_name: str = None,
                pre_hook: bool = False) -> None:
         for module_name, module in model.named_modules():
@@ -68,5 +68,5 @@ class ModelHook:
     def __getitem__(self, name: str) -> Dict[str, List[np.ndarray]]:
         if name not in self.attached_hooks:
             raise ValueError(f"Invalid key {name}")
-        tensor_dict = self.attached_hooks[name]
-        return {n: [t.numpy() for t in v.saved] for n, v in tensor_dict.items()}
+        hook_dict = self.attached_hooks[name]
+        return {n: v.saved for n, v in hook_dict.items()}

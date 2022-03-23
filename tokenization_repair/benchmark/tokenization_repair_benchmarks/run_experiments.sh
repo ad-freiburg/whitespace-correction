@@ -3,7 +3,7 @@ set -e
 
 base_dir=$(dirname "$0")
 if [[ $1 == "" ]]; then
-  split=cleaned
+  split=org
 else
   split=$1
 fi

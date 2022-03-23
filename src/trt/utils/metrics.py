@@ -144,11 +144,20 @@ def tok_rep_f1_prec_rec(
         fn += fn_
 
         scores = _tp_fp_fn_to_f1_prec_rec(tp_, fp_, fn_)
-        if not all(s is None for s in scores):
-            f1, prec, rec = scores
-            f1s.append(f1)
-            precs.append(prec)
-            recs.append(rec)
+        if all(s is None for s in scores):
+            # scores are none if either
+            # 1. there are no groundtruth operations (tp == fp == fn == 0)
+            # 2. there are no true positives (tp == 0)
+            if len(gt_insertions_and_deletions) == 0 and len(pred_insertions_and_deletions) == 0:
+                scores = (1, 1, 1)
+            else:
+                assert tp_ == 0
+                scores = (0, 0, 0)
+
+        f1, prec, rec = scores
+        f1s.append(f1)
+        precs.append(prec)
+        recs.append(rec)
 
     f1_seq, prec_seq, rec_seq = np.mean(f1s) if f1s else 0, np.mean(precs) if precs else 0, np.mean(recs) if recs else 0
     f1_mic, prec_mic, rec_mic = _tp_fp_fn_to_f1_prec_rec(tp, fp, fn)

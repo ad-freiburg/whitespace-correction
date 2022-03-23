@@ -2,7 +2,9 @@ from typing import Dict, Optional, Tuple
 
 import tokenizers
 import torch
-from torch import nn
+from torch import nn, Tensor
+from torch.nn.modules.transformer import _get_activation_fn
+from torch.nn import functional as F
 
 from trt.model import tokenizer as toklib
 from trt.model.embedding import Embedding
@@ -36,6 +38,81 @@ class BaseEncoder(nn.Module):
         return self.config.model_dim
 
 
+# exact copy of pytorch native transformer encoder layer, just with need_weights set to true
+class TransformerEncoderLayer(nn.Module):
+    __constants__ = ['batch_first', 'norm_first']
+
+    def __init__(self, d_model, nhead, dim_feedforward=2048, dropout=0.1, activation=F.relu,
+                 layer_norm_eps=1e-5, batch_first=False, norm_first=False,
+                 device=None, dtype=None) -> None:
+        factory_kwargs = {'device': device, 'dtype': dtype}
+        super(TransformerEncoderLayer, self).__init__()
+        self.self_attn = nn.MultiheadAttention(
+            d_model, nhead, dropout=dropout, batch_first=batch_first,
+            **factory_kwargs
+        )
+        # Implementation of Feedforward model
+        self.linear1 = nn.Linear(d_model, dim_feedforward, **factory_kwargs)
+        self.dropout = nn.Dropout(dropout)
+        self.linear2 = nn.Linear(dim_feedforward, d_model, **factory_kwargs)
+
+        self.norm_first = norm_first
+        self.norm1 = nn.LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.norm2 = nn.LayerNorm(d_model, eps=layer_norm_eps, **factory_kwargs)
+        self.dropout1 = nn.Dropout(dropout)
+        self.dropout2 = nn.Dropout(dropout)
+
+        # Legacy string support for activation function.
+        if isinstance(activation, str):
+            self.activation = _get_activation_fn(activation)
+        else:
+            self.activation = activation
+
+    def __setstate__(self, state):
+        if 'activation' not in state:
+            state['activation'] = F.relu
+        super(TransformerEncoderLayer, self).__setstate__(state)
+
+    def forward(self, src: Tensor, src_mask: Optional[Tensor] = None,
+                src_key_padding_mask: Optional[Tensor] = None) -> Tensor:
+        r"""Pass the input through the encoder layer.
+
+        Args:
+            src: the sequence to the encoder layer (required).
+            src_mask: the mask for the src sequence (optional).
+            src_key_padding_mask: the mask for the src keys per batch (optional).
+
+        Shape:
+            see the docs in Transformer class.
+        """
+
+        # see Fig. 1 of https://arxiv.org/pdf/2002.04745v1.pdf
+
+        x = src
+        if self.norm_first:
+            x = x + self._sa_block(self.norm1(x), src_mask, src_key_padding_mask)
+            x = x + self._ff_block(self.norm2(x))
+        else:
+            x = self.norm1(x + self._sa_block(x, src_mask, src_key_padding_mask))
+            x = self.norm2(x + self._ff_block(x))
+
+        return x
+
+    # self-attention block
+    def _sa_block(self, x: Tensor,
+                  attn_mask: Optional[Tensor], key_padding_mask: Optional[Tensor]) -> Tensor:
+        x = self.self_attn(x, x, x,
+                           attn_mask=attn_mask,
+                           key_padding_mask=key_padding_mask,
+                           need_weights=True)[0]
+        return self.dropout1(x)
+
+    # feed forward block
+    def _ff_block(self, x: Tensor) -> Tensor:
+        x = self.linear2(self.dropout(self.activation(self.linear1(x))))
+        return self.dropout2(x)
+
+
 class PytorchEncoder(BaseEncoder):
     def __init__(self,
                  config: EncoderDecoderConfig,
@@ -60,11 +137,11 @@ class PytorchEncoder(BaseEncoder):
         if custom_encoder_layer is not None:
             encoder_layer = custom_encoder_layer
         else:
-            encoder_layer = nn.TransformerEncoderLayer(d_model=self.config.model_dim,
-                                                       nhead=self.config.attention_heads,
-                                                       dim_feedforward=self.config.feedforward_dim,
-                                                       dropout=self.config.dropout,
-                                                       activation=self.config.activation)
+            encoder_layer = TransformerEncoderLayer(d_model=self.config.model_dim,
+                                                    nhead=self.config.attention_heads,
+                                                    dim_feedforward=self.config.feedforward_dim,
+                                                    dropout=self.config.dropout,
+                                                    activation=self.config.activation)
         self.encoder = nn.TransformerEncoder(encoder_layer=encoder_layer,
                                              num_layers=1 if self.config.share_parameters else self.config.num_layers)
 

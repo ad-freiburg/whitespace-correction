@@ -1,21 +1,21 @@
 import argparse
 import collections
 import os
-from typing import Tuple, Dict
+from typing import Dict
 
-from tabulate import tabulate
 from tqdm import tqdm
 
-from trt.utils import common, metrics, io
+from trt.utils import common, metrics, io, tables
 
 
 def parse_args():
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("--benchmarks", type=str, required=True)
-    parser.add_argument("--results", type=str, required=True)
+    parser.add_argument("--benchmark-dir", type=str, required=True)
+    parser.add_argument("--result-dir", type=str, required=True)
 
-    parser.add_argument("--save-latex-dir", type=str, default=None)
+    parser.add_argument("--format", choices=["markdown", "latex"], default="markdown")
+    parser.add_argument("--save-dir", type=str, required=True)
 
     return parser.parse_args()
 
@@ -50,37 +50,61 @@ def evaluate(
     seq_acc = metrics.sequence_accuracy(predictions, groundtruths)
 
     return {
-        "seq_acc": seq_acc,
-        "mic_f1": mic_f1,
-        "seq_avg_f1": seq_f1,
-        "ins_f1": ins_f1,
-        "del_f1": del_f1
+        "seq_acc": seq_acc * 100,
+        "mic_f1": mic_f1 * 100,
+        "seq_avg_f1": seq_f1 * 100,
+        "ins_f1": ins_f1 * 100,
+        "del_f1": del_f1 * 100
     }
 
 
 _METRIC_TO_FMT = {
-    "seq_acc": ".4f",
-    "mic_f1": ".4f",
-    "seq_avg_f1": ".4f"
+    "seq_acc": ".1f",
+    "mic_f1": ".1f",
+    "seq_avg_f1": ".1f",
+    "ins_f1": ".1f",
+    "del_f1": ".1f"
 }
 
 if __name__ == "__main__":
     args = parse_args()
     logger = common.get_logger("EVALUATE_PAPER")
 
-    benchmarks = sorted(io.glob_safe(os.path.join(args.benchmarks, "*", "test")))
+    benchmarks = sorted(io.glob_safe(os.path.join(args.benchmark_dir, "*", "test")))
     benchmark_names = [b.split("/")[-2] for b in benchmarks]
 
     models = [
-        "the-one",
+        # baselines
+        "google",
+        "wordsegment",
+        # encoder only
         "eo_large_arxiv_with_errors",
         "eo_medium_arxiv_with_errors",
         "eo_small_arxiv_with_errors",
+        # nmt
         "nmt_large_arxiv_with_errors",
         "nmt_medium_arxiv_with_errors",
         "nmt_small_arxiv_with_errors",
-        "google",
-        "wordsegment"
+        # previous work
+        "the-one",
+        "bid+"
+    ]
+
+    horizontal_lines = [
+        # baselines
+        False,
+        True,
+        # encoder only
+        False,
+        False,
+        True,
+        # nmt
+        False,
+        False,
+        True,
+        # previous work
+        False,
+        False
     ]
 
     results = collections.defaultdict(list)
@@ -92,11 +116,14 @@ if __name__ == "__main__":
         ):
             benchmark_input = os.path.join(benchmark, "corrupt.txt")
             benchmark_gt = os.path.join(benchmark, "correct.txt")
-            model_prediction = os.path.join(args.results, benchmark_name, "test", f"{model}.txt")
+            model_prediction = os.path.join(args.result_dir, benchmark_name, "test", f"{model}.txt")
+            # for the-one, fallback to bid+ (they are the same on benchmarks with no whitespaces)
             if not os.path.exists(model_prediction) and model == "the-one":
-                model_prediction = os.path.join(args.results, benchmark_name, "test", "bid+.txt")
+                model_prediction = os.path.join(args.result_dir, benchmark_name, "test", "bid+.txt")
 
             if not os.path.exists(model_prediction):
+                for metric_name in _METRIC_TO_FMT:
+                    model_scores[metric_name].append(None)
                 continue
 
             m = evaluate(
@@ -107,26 +134,52 @@ if __name__ == "__main__":
                 model_scores[metric_name].append(score)
 
         for metric_name, benchmark_scores in model_scores.items():
-            results[metric_name].append([model] + benchmark_scores)
-
-    for metric_name, res in results.items():
-        results_table_md = tabulate(
-            res,
-            headers=["Model"] + benchmark_names,
-            tablefmt="pipe",
-            floatfmt=_METRIC_TO_FMT.get(metric_name, ".4f")
-        )
-        logger.info(f"Results table: {metric_name}\n{results_table_md}")
-
-        if args.save_latex_dir is not None:
-            results_table_tex = tabulate(
-                res,
-                headers=["Model"] + benchmark_names,
-                tablefmt="latex",
-                floatfmt=_METRIC_TO_FMT.get(metric_name, ".4f")
+            results[metric_name].append(
+                [model] + benchmark_scores
             )
-            os.makedirs(args.save_latex_dir, exist_ok=True)
-            path = os.path.join(args.save_latex_dir, f"{metric_name}.tex")
 
-            with open(path, "w", encoding="utf8") as f:
-                f.write(results_table_tex)
+    for metric_name, data in results.items():
+        if len(data) == 0:
+            continue
+
+        best_scores_per_benchmark = [float("-inf")] * len(data[0])
+        best_models_per_benchmark = [set()] * len(data[0])
+        for i, model_scores_per_benchmark in enumerate(data):
+            for j, benchmark_score in enumerate(model_scores_per_benchmark):
+                if j == 0:  # j == 0 is model name
+                    continue
+                if benchmark_score is None:
+                    continue
+                elif benchmark_score == best_scores_per_benchmark[j]:
+                    best_models_per_benchmark[j].add(i)
+                elif benchmark_score > best_scores_per_benchmark[j]:
+                    best_models_per_benchmark[j] = {i}
+                    best_scores_per_benchmark[j] = benchmark_score
+
+        bold_cells = set(
+            (i, j) for j, best_models in enumerate(best_models_per_benchmark) for i in best_models
+        )
+
+        # convert data to strings
+        data = [
+            line[:1] + [
+                f"{score:{_METRIC_TO_FMT[metric_name]}}" if score is not None else "-"
+                for score in line[1:]
+            ]
+            for line in data
+        ]
+
+        results_table = tables.generate_table(
+            header=["Model"] + benchmark_names,
+            data=data,
+            horizontal_lines=horizontal_lines,
+            bold_cells=bold_cells,
+            fmt=args.format
+        )
+        os.makedirs(args.save_dir, exist_ok=True)
+        path = os.path.join(args.save_dir, f"{metric_name}.{'md' if args.format == 'markdown' else 'tex'}")
+
+        with open(path, "w", encoding="utf8") as f:
+            f.write(results_table)
+
+        logger.info(f"Results table: {metric_name}\n{results_table}")
