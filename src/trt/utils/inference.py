@@ -3,7 +3,9 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
+
 import tokenizers
+
 import torch
 from torch import nn
 from torch.nn.utils import rnn
@@ -482,19 +484,20 @@ def batch_inference(model: nn.Module,
                                            device=device)
 
 
-def beam_inference(model: nn.Module,
-                   bos_token_id: int,
-                   eos_token_id: int,
-                   max_input_length: int,
-                   max_output_length: int,
-                   device: torch.device,
-                   beam_width: int,
-                   score_fn: ScoreFn = log_likelihood_score_fn(),
-                   input_strings: Optional[List[str]] = None,
-                   input_ids: Optional[torch.Tensor] = None,
-                   decoder_only: Optional[bool] = False,
-                   decoder_input_ids: Optional[List[torch.Tensor]] = None) -> List[
-    List[SequenceGenerationInferenceResult]]:
+def beam_inference(
+        model: nn.Module,
+        bos_token_id: int,
+        eos_token_id: int,
+        max_input_length: int,
+        max_output_length: int,
+        device: torch.device,
+        beam_width: int,
+        score_fn: ScoreFn = log_likelihood_score_fn(),
+        input_strings: Optional[List[str]] = None,
+        input_ids: Optional[torch.Tensor] = None,
+        decoder_only: Optional[bool] = False,
+        decoder_input_ids: Optional[List[torch.Tensor]] = None
+) -> List[List[SequenceGenerationInferenceResult]]:
     if decoder_only:
         assert decoder_input_ids is not None
         B = len(decoder_input_ids)

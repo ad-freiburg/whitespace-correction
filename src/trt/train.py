@@ -9,15 +9,18 @@ from io import StringIO
 from typing import Dict, List, Optional, Tuple
 
 import GPUtil
+
 import numpy as np
+
 import tokenizers
+
 import torch
 from torch import distributed as dist
 from torch import multiprocessing as mp
 from torch import nn
 from torch import optim
+from torch.backends import cudnn  # noqa
 from torch.cuda import amp
-from torch.backends import cudnn
 from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
@@ -271,7 +274,7 @@ def evaluate(model_type: str,
     criterion = criterion.to(device)
 
     rank = dist.get_rank()
-    assert rank == 0, f"evaluation should be only done on main process"
+    assert rank == 0, "evaluation should be only done on main process"
 
     mean_loss = metrics.AverageMetric(name="loss")
     additional_losses = {}

@@ -1,2 +1,2 @@
-from trt.api import *
-from trt.version import __version__
+from trt.api import *  # noqa
+from trt.version import __version__  # noqa

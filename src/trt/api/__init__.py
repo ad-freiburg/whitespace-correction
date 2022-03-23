@@ -3,22 +3,23 @@ import math
 import os
 import pickle
 import pprint
-from typing import Union, List, Optional, Iterable, Dict
+from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+
 import torch
+
 from tqdm import tqdm
 
 from trt.api.utils import (
+    char2char_score_fn,
     download_model,
     get_device_info,
-    split,
-    char2char_score_fn,
-    sliding_windows,
-    match_token_ids_ignoring_space_and_unk
+    match_token_ids_ignoring_space_and_unk,
+    sliding_windows
 )
-from trt.model import transformer, tokenizer
-from trt.utils import common, config, io, inference, nlp, tokenization_repair, constants
+from trt.model import tokenizer, transformer
+from trt.utils import common, config, constants, inference, io, nlp, tokenization_repair
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -102,7 +103,7 @@ class TokenizationRepairer:
         self.logger = common.get_logger("TOKENIZATION_REPAIR")
 
         if device != "cpu" and not torch.cuda.is_available():
-            self.logger.info(f"could not find a GPU, using CPU as fallback option")
+            self.logger.info("could not find a GPU, using CPU as fallback option")
             device = "cpu"
 
         self.device = torch.device(device)
@@ -172,8 +173,8 @@ class TokenizationRepairer:
                 "score_fn": char2char_score_fn(self.char_tokenizer)
             }
         else:
-            raise RuntimeError(f"model should either be of type encoder_with_head with a char encoder tokenizer and 3 "
-                               f"output classes or of type transformer with both a char encoder and decoder tokenizer")
+            raise RuntimeError("model should either be of type encoder_with_head with a char encoder tokenizer and 3 "
+                               "output classes or of type transformer with both a char encoder and decoder tokenizer")
 
         self.max_length = self.model.encoder.config.max_num_embeddings - 2  # - 2 because of bos and eos tokens
         self.window_size = math.ceil(0.75 * self.max_length)
@@ -236,8 +237,8 @@ class TokenizationRepairer:
                     input_str[window + self.window_size:
                               window + self.window_size + self.context_size]
                 assert (
-                               ir.token_ids[0] == self.char_tokenizer.token_to_id(constants.BOS)
-                               and ir.token_ids[-1] == self.char_tokenizer.token_to_id(constants.EOS)
+                        ir.token_ids[0] == self.char_tokenizer.token_to_id(constants.BOS)
+                        and ir.token_ids[-1] == self.char_tokenizer.token_to_id(constants.EOS)
                 )
                 from_idx, to_idx = match_token_ids_ignoring_space_and_unk(
                     ir.token_ids[1:-1],
@@ -319,7 +320,7 @@ class TokenizationRepairer:
                         min(length, window + self.window_size + self.context_size),
                         i
                     ))
-                all_inference_results[input_idx] = [None] * len(windows)
+                all_inference_results[input_idx] = [None] * len(windows)  # type: ignore
 
         if sort_by_length:
             batches = sorted(batches, key=lambda e: e[2] - e[1], reverse=True)
@@ -347,7 +348,7 @@ class TokenizationRepairer:
                 f"with {batch_length:,} characters in total"
             )
 
-            kwargs = {}
+            kwargs: Dict[str, Any] = {}
             if self.cfg.model.type == "encoder_with_head":
                 kwargs["no_spaces"] = [" " not in ipt for ipt in batch]
             else:
@@ -362,12 +363,15 @@ class TokenizationRepairer:
                     batch,
                     batch_inference_results
             ):
-                all_inference_results[input_idx][position] = inference_result
+                all_inference_results[input_idx][position] = inference_result  # type: ignore
 
             pbar.update(batch_length)
 
         pbar.close()
-        return [self._merge_inference_results(all_inference_results[i], inputs[i]) for i in range(len(inputs))]
+        return [
+            self._merge_inference_results(all_inference_results[i], inputs[i])  # type: ignore
+            for i in range(len(inputs))
+        ]
 
     def repair_text(
             self,
@@ -379,11 +383,11 @@ class TokenizationRepairer:
         input_is_string = isinstance(inputs, str)
         assert (
                 input_is_string
-                or (isinstance(inputs, list) and len(inputs) > 0 and isinstance(inputs[0], str))
-        ), f"input needs to be a string or a non empty list of strings"
+                or (isinstance(inputs, list) and all(isinstance(ipt, str) for ipt in inputs))
+        ), "input needs to be a string or a non empty list of strings"
 
         if input_is_string:
-            inputs = [inputs]
+            inputs = [inputs]  # type: ignore
 
         # clean inputs from leading, trailing or multiple whitespaces
         inputs = [nlp.clean_sequence(ipt) for ipt in inputs]
@@ -392,15 +396,6 @@ class TokenizationRepairer:
 
         outputs = [self._inference_result_to_str(ir, ipt) for ipt, ir in zip(inputs, inference_results)]
         return outputs[0] if input_is_string else outputs
-
-    def repair_text_iter(
-            self,
-            input_iterator: Iterable[StringInputOutput],
-            batch_size: int = 16,
-            sort_by_length: bool = True
-    ) -> Iterable[str]:
-        for inputs in input_iterator:
-            yield self.repair_text(inputs, batch_size, sort_by_length)
 
     def repair_file(
             self,
@@ -424,7 +419,7 @@ class TokenizationRepairer:
                     out_file.write("\n")
             return None
         else:
-            return outputs
+            return outputs  # type: ignore
 
     def to(self, device: Union[str, int]) -> "TokenizationRepairer":
         self.device = torch.device(device)

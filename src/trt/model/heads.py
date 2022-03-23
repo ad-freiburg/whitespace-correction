@@ -1,6 +1,7 @@
-from typing import List, Any, Dict
+from typing import Any, Dict, List
 
 import einops
+
 import torch
 from torch import nn
 

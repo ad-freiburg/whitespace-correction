@@ -5,13 +5,14 @@ import os
 import pprint
 import threading
 import time
-from typing import Union, Optional, Tuple, List
+from typing import Dict, Generator, List, Optional
+
+from flask import Flask, Response, abort, cli, jsonify, request
 
 import torch.cuda
-from flask import Flask, abort, jsonify, request, cli, Response
 
-from ..api import get_available_models, TokenizationRepairer
-from ..utils import common
+from trt.api import TokenizationRepairer, get_available_models
+from trt.utils import common
 
 # disable flask startup message and set flask mode to development
 cli.show_server_banner = lambda *_: None
@@ -26,9 +27,9 @@ logger = common.get_logger("TRT_SERVER")
 
 class TokenizationRepairers:
     def __init__(self) -> None:
-        self.timeout = 1
-        self.locks = {}
-        self.streams = {}
+        self.timeout = 1.0
+        self.locks: Dict[str, threading.Lock] = {}
+        self.streams: Dict[str, torch.cuda.Stream] = {}
         self.loaded = False
         self.default_model = ""
 
@@ -49,7 +50,7 @@ class TokenizationRepairers:
         self.loaded = True
 
     @contextlib.contextmanager
-    def get_repairer(self, name: Optional[str] = None) -> Union[Tuple[str, int], TokenizationRepairer]:
+    def get_repairer(self, name: Optional[str] = None) -> Generator:
         if name is None:
             name = self.default_model
         # yield either the tokenization repair model or a http status code indicating why this did not work
@@ -82,7 +83,7 @@ def after_request(response: Response) -> Response:
 
 
 @server.route(f"{server_base_url}/models")
-def get_models():
+def get_models() -> Response:
     response = jsonify(
         {
             "models": [
@@ -96,7 +97,7 @@ def get_models():
 
 
 @server.route(f"{server_base_url}/repair_text", methods=["GET"])
-def repair_text():
+def repair_text() -> Response:
     start = time.perf_counter()
     text = request.args.get("text")
     if text is None:
@@ -126,11 +127,11 @@ def repair_text():
 
 
 @server.route(f"{server_base_url}/repair_file", methods=["POST"])
-def repair_file():
+def repair_file() -> Response:
     start = time.perf_counter()
     text = request.form.get("text")
     if text is None:
-        return abort(Response(f"request missing 'text' field in form data", status=400))
+        return abort(Response("request missing 'text' field in form data", status=400))
     text = [line.strip() for line in text.splitlines()]
     model = request.args.get("model", tok_repairers.default_model)
     with tok_repairers.get_repairer(model) as tok_rep:

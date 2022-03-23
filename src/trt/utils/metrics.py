@@ -1,10 +1,11 @@
 import collections
 import math
 from abc import ABC
-from typing import Any, Callable, List, Optional, Tuple, Union, no_type_check, Set
+from typing import Any, Callable, List, Optional, Set, Tuple, Union, no_type_check
+
+from editdistance import distance as ed
 
 import numpy as np
-from editdistance import distance as ed
 
 import tokenizers
 

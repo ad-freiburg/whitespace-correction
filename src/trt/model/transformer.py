@@ -1,8 +1,10 @@
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import tokenizers
+
 import torch
 from torch import nn
+
 from trt.model.decoder import BaseDecoder, PytorchDecoder
 from trt.model.encoder import BaseEncoder, PytorchEncoder, get_encoder_from_config
 from trt.model.heads import get_head_from_config

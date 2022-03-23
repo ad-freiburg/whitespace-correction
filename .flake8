@@ -1,7 +1,6 @@
 [flake8]
  max-line-length = 120
  show-source = True
- application-import-names = tfnm_text
+ application-import-names = trt
  exclude =
-     venv
      build

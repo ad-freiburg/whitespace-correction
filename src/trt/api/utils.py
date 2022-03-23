@@ -5,15 +5,18 @@ import platform
 import re
 import shutil
 import zipfile
-from typing import List, Union, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import requests
+
 import tokenizers
+
 import torch
+
 from tqdm import tqdm
 
 from trt.utils import constants, tables
-from trt.utils.inference import ScoreFn, Beam, log_likelihood_score_fn
+from trt.utils.inference import Beam, ScoreFn, log_likelihood_score_fn
 
 _BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
 _NAME_TO_URL = {

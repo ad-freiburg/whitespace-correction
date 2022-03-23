@@ -1,6 +1,6 @@
 import copy
 from collections import defaultdict
-from typing import Any, Dict, List, no_type_check, Type, Union, Tuple
+from typing import Any, Dict, List, Tuple, Type, Union, no_type_check
 
 import numpy as np
 

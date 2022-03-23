@@ -16,8 +16,16 @@ import numpy as np
 import torch
 from torch import distributed as dist
 from torch.nn.utils import rnn
-from torch.utils.data import BatchSampler, DataLoader, Dataset, RandomSampler, Sampler, SequentialSampler, Subset, \
-    DistributedSampler
+from torch.utils.data import (
+    BatchSampler,
+    DataLoader,
+    Dataset,
+    DistributedSampler,
+    RandomSampler,
+    Sampler,
+    SequentialSampler,
+    Subset
+)
 
 from trt.model import tokenizer as toklib
 from trt.utils import common, constants, nlp

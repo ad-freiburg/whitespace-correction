@@ -1,4 +1,4 @@
-from typing import List, Optional, Tuple, Set
+from typing import List, Optional, Set, Tuple
 
 
 __all__ = ["generate_table"]

@@ -1,10 +1,11 @@
 from typing import Dict, Optional, Tuple
 
 import tokenizers
+
 import torch
-from torch import nn, Tensor
-from torch.nn.modules.transformer import _get_activation_fn
+from torch import Tensor, nn
 from torch.nn import functional as F
+from torch.nn.modules.transformer import _get_activation_fn
 
 from trt.model import tokenizer as toklib
 from trt.model.embedding import Embedding
