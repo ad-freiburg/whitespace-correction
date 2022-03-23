@@ -204,11 +204,11 @@ class TestData:
 
     @pytest.mark.parametrize("seed", list(range(20)))
     @pytest.mark.parametrize("tokenizer", ["byte", "char"])
-    def test_masked_language_modeling(self, seed: int, tokenizer: str) -> None:
-        preprocessing_fn = get_preprocessing_fn("masked_language_modeling",
-                                                tokenizer=tokenizer,
+    def test_character_masked_language_modeling(self, seed: int, tokenizer: str) -> None:
+        preprocessing_fn = get_preprocessing_fn("character_masked_language_modeling",
                                                 seed=seed,
-                                                p=0.5)
+                                                word_p=1.0,
+                                                full_word_p=0.2)
 
         test_item = {"sequence": "This is a test sentence to test masked language modeling"}
 
@@ -309,10 +309,9 @@ class TestData:
                                                         TokenizationRepairTokens.KEEP_CHAR.value}
             assert len(out_item["target_sequence"]) == len(out_item["sequence"])
 
-    @pytest.mark.parametrize("use_labels", [True, False])
-    def test_tokenization_repair(self, use_labels: bool) -> None:
-        preprocessing_fn = get_preprocessing_fn("tokenization_repair",
-                                                use_labels=use_labels)
+    @pytest.mark.parametrize("output_type", ["repair_token", "char", "label"])
+    def test_tokenization_repair(self, output_type: str) -> None:
+        preprocessing_fn = get_preprocessing_fn("tokenization_repair", output_type=output_type)
 
         test_item = {"sequence": "Thi s is atest"}
 
@@ -324,11 +323,15 @@ class TestData:
         out_item = preprocessing_fn(test_item)
 
         assert set(test_item["sequence"]) - set(out_item["sequence"]) <= {" "}
-        if use_labels:
+        if output_type == "label":
             assert "labels" in out_item
             assert "target_sequence" not in out_item
             assert out_item["labels"] == [0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]
-        else:
+        elif output_type == "repair_token":
             assert "labels" not in out_item
             assert "target_sequence" in out_item
             assert out_item["target_sequence"] == "###x######_###"
+        else:
+            assert "labels" not in out_item
+            assert "target_sequence" in out_item
+            assert out_item["target_sequence"] == "This is a test"

@@ -13,14 +13,15 @@ BASE_DIR = os.path.dirname(__file__)
 @pytest.mark.parametrize("tokenizer_name", ["char", "byte", "tokenization_repair"])
 @pytest.mark.parametrize("target_tokenizer_name", ["char", "byte", "tokenization_repair"])
 @pytest.mark.parametrize("pretokenize", [True, False])
-@pytest.mark.parametrize("preprocessing_config", ["edit_tokens_corruption", "tokenization_repair"],
-                         indirect=True)
+@pytest.mark.parametrize("preprocessing_config", ["edit_tokens_corruption", "tokenization_repair"], indirect=True)
 class TestDataPreprocessing:
-    def test_data_preprocessing(self,
-                                tokenizer_name: str,
-                                target_tokenizer_name: str,
-                                pretokenize: bool,
-                                preprocessing_config: PreprocessingConfig) -> None:
+    def test_data_preprocessing(
+            self,
+            tokenizer_name: str,
+            target_tokenizer_name: str,
+            pretokenize: bool,
+            preprocessing_config: PreprocessingConfig
+    ) -> None:
         lmdb_name = f"dummy_lmdb_{tokenizer_name}_{target_tokenizer_name}_{pretokenize}_{preprocessing_config.type}"
 
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -31,11 +32,13 @@ class TestDataPreprocessing:
                 tokenizer=tokenizer_name,
                 target_tokenizer=target_tokenizer_name,
                 pretokenize=pretokenize,
+                ensure_equal_length=True,
                 preprocessing=[preprocessing_config],
                 lmdb_name=lmdb_name,
                 max_sequences=1000,
                 max_sequence_length=512,
-                cut_overflowing=False)
+                cut_overflowing=False
+            )
 
             # save the config in yaml format
             config_path = os.path.join(temp_dir, f"{lmdb_name}_config.yaml")
