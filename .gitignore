@@ -137,6 +137,8 @@ dmypy.json
 # custom
 Makefile.slurm
 rsync_exclude.txt
+
+third_party
 tokenization_repair/misspellings
 tokenization_repair/data
 tokenization_repair/experiments
