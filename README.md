@@ -89,6 +89,7 @@ trt --server <config_file>
 -b <batch_size> # specify a different batch size
 -u # do not sort the inputs before repairing
 -p # switch on pipe mode (useful but not needed when using Linux pipes)
+--precision # set inference precision (one of fp32, fp16 and bfp16)
 -e <experiment_dir> # specify the path to an experiment directory to load the model from 
                     # (equivalent to TokenizationRepairer.from_experiment(experiment_dir) in python API)
 --force-download # force download of the tokenization repair model even if it was already downloaded
@@ -107,6 +108,7 @@ trt --server <config_file>
 > - port (int, required)
 > - timeout (float, optional, by default timeout is set to 10 seconds)
 > - models (list of str, optional, by default all models will be served)
+> - precision (str, optional, by default precision is set to fp32)
 > 
 > See [configs/server.json](configs/server.json) for an exemplary server configuration file
 
