@@ -27,6 +27,14 @@ print(get_available_models())
 
 # create a tokenization repair instance, using the default pretrained model
 tok_rep = TokenizationRepairer.from_pretrained()
+# you can move the tokenization repair model to a different device, e.g.
+tok_rep.to("cuda")  # default
+tok_rep.to("cuda:3")  # if you have multiple GPUs (alternatively use tok_rep.to(3))
+tok_rep.to("cpu")
+# you can also set the inference precision, e.g.
+tok_rep.set_precision("fp32")  # default
+tok_rep.set_precision("fp16")
+tok_rep.set_precision("bfp16")
 
 # repair single strings
 repaired_string = tok_rep.repair_text("p l e se,repiar thissen ten se!")
