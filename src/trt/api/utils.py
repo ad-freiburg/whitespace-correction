@@ -180,6 +180,7 @@ def generate_report(
         model: nn.Module,
         inputs: List[str],
         runtime: float,
+        precision: torch.dtype,
         batch_size: int,
         sort_by_length: bool,
         device: torch.device,
@@ -187,6 +188,16 @@ def generate_report(
 ) -> Optional[str]:
     input_size = len(inputs)
     input_size_chars = sum(len(ipt) for ipt in inputs)
+
+    if precision == torch.float16:
+        precision_str = "fp16"
+    elif precision == torch.bfloat16:
+        precision_str = "bfp16"
+    elif precision == torch.float32:
+        precision_str = "fp32"
+    else:
+        raise ValueError(f"expected precision to be one of torch.float16, torch.bfloat16 or torch.float32")
+
     report = tables.generate_table(
         header=[
             "Task",
@@ -197,6 +208,7 @@ def generate_report(
             "kChar/s",
             "MiB GPU memory",
             "Mio. parameters",
+            "Precision",
             "Batch size",
             "Sorted",
             "Device"
@@ -211,6 +223,7 @@ def generate_report(
                 f"{input_size_chars / (runtime * 1000):.1f}",
                 f"{torch.cuda.max_memory_reserved(device) // (1024 ** 2):,}" if device.type == "cuda" else "-",
                 f"{common.get_num_parameters(model)['total'] / (1000 ** 2):,.1f}",
+                precision_str,
                 str(batch_size),
                 "yes" if sort_by_length else "no",
                 f"{torch.cuda.get_device_name(device)}, {get_cpu_info()}" if device.type == "cuda" else get_cpu_info()

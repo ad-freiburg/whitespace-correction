@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional, Union
 import numpy as np
 
 import torch
+from torch import autocast
 
 from tqdm import tqdm
 
@@ -180,6 +181,8 @@ class TokenizationRepairer:
         self.window_size = math.ceil(0.75 * self.max_length)
         self.context_size = math.floor((self.max_length - self.window_size) / 2)
 
+        self._mixed_precision_dtype = torch.float32
+
     def _merge_inference_results(
             self,
             inference_results: List[
@@ -191,9 +194,7 @@ class TokenizationRepairer:
             ],
             input_str: str
     ) -> inference.InferenceResult:
-        assert (
-                len(inference_results) > 0
-        )
+        assert (len(inference_results) > 0)
 
         input_length = len(input_str)
         if isinstance(inference_results[0], inference.SequenceClassificationInferenceResult):
@@ -288,9 +289,7 @@ class TokenizationRepairer:
 
             output_str = "".join(output_chars)
             assert input_str_no_spaces_ptr == len(input_str_no_spaces)
-            output_str_no_spaces = output_str.replace(" ", "")
-            assert output_str_no_spaces == input_str_no_spaces, \
-                f"{input_str} --> {output_str}\n{input_str_no_spaces}\n{output_str_no_spaces}"
+            assert output_str.replace(" ", "") == input_str_no_spaces
             return output_str
 
     @torch.inference_mode()
@@ -355,10 +354,22 @@ class TokenizationRepairer:
                 kwargs["input_strings"] = [seq.replace(" ", "") for seq in batch_sequences]
             # add inference keyword arguments to the model
             kwargs.update(self.inference_kwargs)
-            batch_inference_results = self.model.inference(
-                batch_sequences,
-                **kwargs
-            )
+            # this is a slight hack for now, because fp32 on cpu throws an error even when enabled=False
+            if self.mixed_precision_enabled:
+                with autocast(
+                        device_type=self.device.type,
+                        dtype=self._mixed_precision_dtype,
+                        enabled=self.mixed_precision_enabled
+                ):
+                    batch_inference_results = self.model.inference(
+                        batch_sequences,
+                        **kwargs
+                    )
+            else:
+                batch_inference_results = self.model.inference(
+                    batch_sequences,
+                    **kwargs
+                )
             for (input_idx, _, _, position), inference_result in zip(
                     batch,
                     batch_inference_results
@@ -425,3 +436,23 @@ class TokenizationRepairer:
         self.device = torch.device(device)
         self.model = self.model.to(self.device)
         return self
+
+    def set_precision(self, precision: str) -> None:
+        assert precision in {"fp32", "fp16", "bfp16"}
+
+        if precision == "fp32":
+            mixed_precision_dtype = torch.float32
+        elif precision == "fp16":
+            mixed_precision_dtype = torch.float16
+        else:
+            mixed_precision_dtype = torch.bfloat16
+
+        if self.device.type == "cpu" and precision == "fp16":
+            self.logger.info("Setting precision to bfp16 instead of fp16, because fp16 is not supported on CPU yet")
+            mixed_precision_dtype = torch.bfloat16
+
+        self._mixed_precision_dtype = mixed_precision_dtype
+
+    @property
+    def mixed_precision_enabled(self) -> bool:
+        return self._mixed_precision_dtype != torch.float32

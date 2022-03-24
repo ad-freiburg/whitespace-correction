@@ -33,7 +33,7 @@ class TokenizationRepairers:
         self.loaded = False
         self.default_model = ""
 
-    def init(self, models: List[str], timeout: float) -> None:
+    def init(self, models: List[str], timeout: float, precision: str) -> None:
         num_devices = torch.cuda.device_count()
         logger.info(f"Found {num_devices} GPUs")
         self.timeout = timeout
@@ -44,6 +44,7 @@ class TokenizationRepairers:
                 tok_rep = TokenizationRepairer.from_pretrained(model, i % num_devices)
             else:
                 tok_rep = TokenizationRepairer.from_pretrained(model, "cpu")
+            tok_rep.set_precision(precision)
             self.__setattr__(model, tok_rep)
             if i == 0:
                 self.default_model = model
@@ -169,9 +170,10 @@ def run_flask_server(config_path: str) -> None:
 
     timeout = config.get("timeout", 10)
     models = config.get("models", [model.name for model in get_available_models()])
+    precision = config.get("precision", "fp32")
     logger.info(f"Loaded config for server:\n{pprint.pformat(config)}")
 
-    tok_repairers.init(models=models, timeout=timeout)
+    tok_repairers.init(models=models, timeout=timeout, precision=precision)
 
     logger.info(f"Starting server on {host}:{port}...")
     server.run(host, port, debug=False, use_reloader=False)

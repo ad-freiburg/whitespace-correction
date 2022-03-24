@@ -9,5 +9,6 @@
     "nmt_medium_arxiv_with_errors",
     "nmt_small_arxiv_with_errors"
   ],
-  "timeout": 10
+  "timeout": 10,
+  "precision": "fp32"
 }
