@@ -56,7 +56,7 @@ def show_probabilities(args: argparse.Namespace) -> None:
         logits = model_hook["logits"]["decoder.out_proj"]
         logits = [l[-1, 0, :] for l in logits]
         for l in logits:
-            top_k_val, top_k_ind = torch.topk(torch.softmax(l, dim=0), k=3, dim=0)
+            top_k_val, top_k_ind = torch.topk(torch.softmax(l, dim=0), k=2, dim=0)
             print(
                 [tokenizer.id_to_token(token_id) for token_id in top_k_ind.tolist()], "\t",
                 [round(f, 2) for f in top_k_val.tolist()]
