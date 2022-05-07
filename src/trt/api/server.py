@@ -11,7 +11,7 @@ from flask import Flask, Response, abort, cli, jsonify, request
 
 import torch.cuda
 
-from trt.api import TokenizationRepairer, get_available_models
+from trt.api import TokenizationRepairer, get_available_models, ModelInfo
 from trt.utils import common
 
 # disable flask startup message and set flask mode to development
@@ -49,6 +49,11 @@ class TokenizationRepairers:
             if i == 0:
                 self.default_model = model
         self.loaded = True
+
+    @property
+    def available_models(self) -> List[ModelInfo]:
+        all_available_models = get_available_models()
+        return [model for model in all_available_models if model.name in self.locks]
 
     @contextlib.contextmanager
     def get_repairer(self, name: Optional[str] = None) -> Generator:
@@ -89,7 +94,7 @@ def get_models() -> Response:
         {
             "models": [
                 {"name": model.name, "description": model.description}
-                for model in get_available_models()
+                for model in tok_repairers.available_models
             ],
             "default": tok_repairers.default_model
         }
