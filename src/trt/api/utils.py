@@ -81,7 +81,7 @@ def download_model(name: str, cache_dir: str, force_download: bool, logger: logg
         except Exception as e:
             # only remove the model dir on error when it did not exist before
             if model_does_not_exist:
-                shutil.rmtree(model_dir)
+                shutil.rmtree(model_dir, ignore_errors=True)
             raise e
     else:
         logger.info(f"model {name} was already downloaded to cache directory {cache_dir}")
