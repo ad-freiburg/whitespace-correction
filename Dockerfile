@@ -1,5 +1,6 @@
 FROM pytorch/pytorch:1.10.0-cuda11.3-cudnn8-runtime
 
+ENV TOKENIZATION_REPAIR_CACHE_DIR=/cache
 WORKDIR /trt
 RUN apt update && apt install -y build-essential
 
