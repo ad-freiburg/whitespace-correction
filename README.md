@@ -7,8 +7,8 @@ Repair missing or spurious whitespaces in text.
 This project is mainly tested with Python 3.8, but should work fine with Python 3.6 and newer versions
 
 ```bash
-git clone git@github.com:ad-freiburg/whitespace_repair.git
-cd whitespace_repair
+git clone git@github.com:ad-freiburg/trt.git
+cd trt
 
 # if you just want to use pretrained models
 pip install .
