@@ -11,8 +11,8 @@ from flask import Flask, Response, abort, cli, jsonify, request
 
 import torch.cuda
 
-from trt.api import TokenizationRepairer, get_available_models, ModelInfo
-from trt.utils import common
+from whitespace_repair.api import ModelInfo, TokenizationRepairer, get_available_models
+from whitespace_repair.utils import common
 
 # disable flask startup message and set flask mode to development
 cli.show_server_banner = lambda *_: None

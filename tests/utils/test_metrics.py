@@ -3,7 +3,7 @@ from typing import List, Tuple
 
 import pytest
 
-from trt.utils import metrics
+from whitespace_repair.utils import metrics
 
 
 class TestMetrics:

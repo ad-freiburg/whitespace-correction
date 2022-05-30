@@ -8,7 +8,7 @@ sys.path.append("..")
 import numpy as np
 import pytest
 
-from trt.utils import nlp
+from whitespace_repair.utils import nlp
 
 from conftest import randomly_insert_whitespaces
 

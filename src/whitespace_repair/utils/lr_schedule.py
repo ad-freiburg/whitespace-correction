@@ -3,7 +3,7 @@ from typing import Any, Union
 
 from torch import optim
 
-from trt.utils.config import LRSchedulerConfig
+from whitespace_repair.utils.config import LRSchedulerConfig
 
 LR_SCHEDULER_TYPE = Union[optim.lr_scheduler.LambdaLR,
                           optim.lr_scheduler.StepLR,

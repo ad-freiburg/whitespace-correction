@@ -5,7 +5,7 @@ from typing import Dict
 
 from tqdm import tqdm
 
-from trt.utils import common, metrics, io, tables
+from whitespace_repair.utils import common, metrics, io, tables
 
 
 def parse_args():

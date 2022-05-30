@@ -25,10 +25,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from trt.model import transformer
-from trt.utils import common, config, constants, data, io, loss, lr_schedule, metrics
-from trt.utils.lr_schedule import LR_SCHEDULER_TYPE
-from trt.utils.optimizer import get_optimizer_from_config
+from whitespace_repair.model import transformer
+from whitespace_repair.utils import common, config, constants, data, io, loss, lr_schedule, metrics
+from whitespace_repair.utils.lr_schedule import LR_SCHEDULER_TYPE
+from whitespace_repair.utils.optimizer import get_optimizer_from_config
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 # disable parallelism for tokenizers explicitly

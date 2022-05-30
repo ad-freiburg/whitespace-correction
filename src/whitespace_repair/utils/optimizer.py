@@ -3,7 +3,7 @@ from typing import Callable, Iterable, Optional, Tuple
 import torch
 from torch import nn, optim
 
-from trt.utils.config import OptimizerConfig
+from whitespace_repair.utils.config import OptimizerConfig
 
 
 # Code from https://github.com/cybertronai/pytorch-lamb/blob/master/pytorch_lamb/lamb.py

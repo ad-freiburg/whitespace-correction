@@ -12,15 +12,15 @@ from torch import autocast
 
 from tqdm import tqdm
 
-from trt.api.utils import (
+from whitespace_repair.api.utils import (
     char2char_score_fn,
     download_model,
     get_device_info,
     match_token_ids_ignoring_space_and_unk,
     sliding_windows
 )
-from trt.model import tokenizer, transformer
-from trt.utils import common, config, constants, inference, io, nlp, tokenization_repair
+from whitespace_repair.model import tokenizer, transformer
+from whitespace_repair.utils import common, config, constants, inference, io, nlp, tokenization_repair
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -70,12 +70,18 @@ class TokenizationRepairer:
     def from_pretrained(
             model: str = get_available_models()[0].name,
             device: Union[str, int] = "cuda",
+            download_dir: Optional[str] = None,
             cache_dir: Optional[str] = None,
             force_download: bool = False
     ) -> "TokenizationRepairer":
         assert any(model == m.name for m in get_available_models()), \
             f"model {model} does not match any of the available models:\n{pprint.pformat(get_available_models())}"
 
+        if download_dir is None:
+            download_dir = os.environ.get(
+                "TOKENIZATION_REPAIR_DOWNLOAD_DIR",
+                os.path.join(os.path.dirname(__file__), ".download")
+            )
         if cache_dir is None:
             cache_dir = os.environ.get(
                 "TOKENIZATION_REPAIR_CACHE_DIR",
@@ -83,7 +89,7 @@ class TokenizationRepairer:
             )
 
         logger = common.get_logger("DOWNLOAD")
-        model_dir = download_model(model, cache_dir, force_download, logger)
+        model_dir = download_model(model, download_dir, cache_dir, force_download, logger)
 
         return TokenizationRepairer(model_dir, device)
 

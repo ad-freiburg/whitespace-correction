@@ -4,9 +4,9 @@ from typing import Optional, List, Dict
 
 import pandas as pd
 
-from trt.model import encoder
-from trt.api import get_available_models, TokenizationRepairer
-from trt.utils import common, hooks, constants, tokenization_repair
+from whitespace_repair.model import encoder
+from whitespace_repair.api import get_available_models, TokenizationRepairer
+from whitespace_repair.utils import common, hooks, constants, tokenization_repair
 
 import torch
 from torch import nn

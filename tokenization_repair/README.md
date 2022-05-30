@@ -6,15 +6,15 @@ In general, you will only need the following two commands:
 
 First preprocess some data given a preprocessing configuration file using
 
-`python -m trt.preprocess_data --config <path_to_config_file>`
+`python -m whitespace_repair.preprocess_data --config <path_to_config_file>`
 
 After that, train your model given a training configuration file using
 
-`python -m trt.train --config <path_to_config_file>`
+`python -m whitespace_repair.train --config <path_to_config_file>`
 
 To check the options and the required format of the preprocessing and training configuration files,
-see [trt/configs/data_preprocessing/base.yaml](../configs/data_preprocessing/base.yaml) and
-[trt/configs/train/base.yaml](../configs/train/base.yaml).
+see [configs/data_preprocessing/base.yaml](../configs/data_preprocessing/base.yaml) and
+[configs/train/base.yaml](../configs/train/base.yaml).
 
 ### Reproduce results
 
@@ -41,7 +41,7 @@ python utils/subdivide_files.py \
   --lines-per-file 10000 \
   --out-dir data/raw/tokenization_repair_mixed_split
 # convert all the .txt files into jsonl format, because that is required by the
-# trt library data preprocessing functionality (might take a while)
+# whitespace_repair library data preprocessing functionality (might take a while)
 python utils/txt_to_jsonl.py \
   --in-dir data/raw/tokenization_repair_mixed_split \
   --out-dir data/cleaned/tokenization_repair/mixed
@@ -62,7 +62,7 @@ python utils/subdivide_files.py \
   --lines-per-file 10000 \
   --out-dir data/raw/tokenization_repair_mixed_ocr_spelling_errors_split
 # convert all the .txt files into jsonl format, because that is required by the
-# trt library data preprocessing functionality (might take a while)
+# whitespace_repair library data preprocessing functionality (might take a while)
 python utils/txt_to_jsonl.py \
   --in-dir data/raw/tokenization_repair_mixed_ocr_spelling_errors_split \
   --out-dir data/cleaned/tokenization_repair/mixed_with_errors
@@ -78,16 +78,16 @@ All data preprocessing config files can be found in
 To preprocess the data use the following command and replace
 `<path_to_config_file>` with the preprocessing config file you want:
 
-`python -m trt.preprocess_data --config <path_to_config_file>`
+`python -m whitespace_repair.preprocess_data --config <path_to_config_file>`
 
 If you e.g. want to preprocess the Arxiv dataset with spelling and OCR errors for the EO models then execute:
 
-`python -m trt.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_eo_arxiv_with_errors.yaml`
+`python -m whitespace_repair.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_eo_arxiv_with_errors.yaml`
 
 Or if you e.g. want to preprocess the Arxiv dataset without spelling and OCR errors dataset for the NMT models then
 execute:
 
-`python -m trt.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_nmt_arxiv_no_errors.yaml`
+`python -m whitespace_repair.preprocess_data --config configs/data_preprocessing/tokenization_repair/tokenization_repair_char_nmt_arxiv_no_errors.yaml`
 
 You will need to set environment variables for some configs to work, but you will get error messages when the variables
 are not set.
@@ -100,15 +100,15 @@ All training config files can be found in
 To train a model use the following command and replace
 `<path_to_config_file>` with the preprocessing config file you want:
 
-`python -m trt.train --config <path_to_config_file>`
+`python -m whitespace_repair.train --config <path_to_config_file>`
 
 If you e.g. want to train an EO model then execute:
 
-`python -m trt.train --config configs/train/tokenization_repair/eo.yaml`
+`python -m whitespace_repair.train --config configs/train/tokenization_repair/eo.yaml`
 
 Or if you e.g. want to train a NMT model then execute:
 
-`python -m trt.train --config configs/train/tokenization_repair/nmt.yaml`
+`python -m whitespace_repair.train --config configs/train/tokenization_repair/nmt.yaml`
 
 > The training code only works for single or multi GPU training on a single node, so if you do want to train on
 > more than one node, for now you will need to rewrite the code to support it.

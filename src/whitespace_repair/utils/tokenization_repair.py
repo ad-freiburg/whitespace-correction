@@ -1,6 +1,6 @@
 import re
 from enum import Enum
-from typing import List, Union, Tuple
+from typing import List, Union
 
 
 class TokenizationRepairTokens(Enum):

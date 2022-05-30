@@ -12,9 +12,9 @@ import msgpack
 
 import tokenizers
 
-from trt.model import tokenizer as toklib
-from trt.utils import common, data, io
-from trt.utils.config import DataPreprocessingConfig
+from whitespace_repair.model import tokenizer as toklib
+from whitespace_repair.utils import common, data, io
+from whitespace_repair.utils.config import DataPreprocessingConfig
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 

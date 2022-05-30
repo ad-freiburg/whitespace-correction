@@ -11,7 +11,7 @@ import tokenizers
 
 import torch
 
-from trt.utils import constants, tokenization_repair
+from whitespace_repair.utils import constants, tokenization_repair
 
 
 def _ed(l1: Union[List[str], List[List]], l2: Union[List[str], List[List]]) -> float:

@@ -1,4 +1,3 @@
-import io
 import logging
 import os
 import platform
@@ -16,8 +15,8 @@ from torch import nn
 
 from tqdm import tqdm
 
-from trt.utils import common, constants, tables
-from trt.utils.inference import Beam, ScoreFn, log_likelihood_score_fn
+from whitespace_repair.utils import common, constants, tables
+from whitespace_repair.utils.inference import Beam, ScoreFn, log_likelihood_score_fn
 
 _BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
 _NAME_TO_URL = {
@@ -30,26 +29,38 @@ _NAME_TO_URL = {
 }
 
 
-def download_model(name: str, cache_dir: str, force_download: bool, logger: logging.Logger) -> str:
+def _unpack_zip(
+        zip_file_path: str,
+        directory: str
+) -> None:
+    with zipfile.ZipFile(zip_file_path, "r") as zip_file:
+        zip_file.extractall(directory)
+
+
+def download_model(name: str, download_dir: str, cache_dir: str, force_download: bool, logger: logging.Logger) -> str:
     """
 
     Downloads and extracts a model into cache dir and returns the path to the model directory
 
     :param name: unique name of the model
-    :param cache_dir: directory to store the model
+    :param download_dir: directory to store zipped model
+    :param cache_dir: directory to cache unzipped model
     :param force_download: download model even if it is already in the cache dir
     :param logger: instance of a logger to log some useful information
     :return: path of the model directory
     """
+    if name not in _NAME_TO_URL:
+        raise RuntimeError(f"no URL for model {name}, should not happen")
+    url = _NAME_TO_URL[name]
 
-    model_dir = os.path.join(cache_dir, name)
-    model_does_not_exist = not os.path.exists(model_dir)
-    if model_does_not_exist or force_download:
-        if name not in _NAME_TO_URL:
-            raise RuntimeError(f"no URL for model {name}, should not happen")
-
-        logger.info(f"downloading model {name} from {_NAME_TO_URL[name]} to cache directory {cache_dir}")
-        response = requests.get(_NAME_TO_URL[name], stream=True)
+    zip_file_path = os.path.join(download_dir, url.split("/")[-1])
+    model_zip_not_downloaded = not os.path.exists(zip_file_path)
+    if model_zip_not_downloaded or force_download:
+        directory = os.path.dirname(zip_file_path)
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        logger.info(f"downloading model {name} from {_NAME_TO_URL[name]} to download directory {download_dir}")
+        response = requests.get(url, stream=True)
         if not response.ok:
             raise RuntimeError(f"error downloading the model {name} from {_NAME_TO_URL[name]}: "
                                f"status {response.status_code}, {response.reason}")
@@ -66,25 +77,25 @@ def download_model(name: str, cache_dir: str, force_download: bool, logger: logg
                 unit_divisor=1024
             )
 
-            buf = io.BytesIO()
-            for data in response.iter_content():
-                buf.write(data)
-                pbar.update(len(data))
-
-            with zipfile.ZipFile(buf, "r") as zip_file:
-                shutil.rmtree(model_dir, ignore_errors=True)
-                os.makedirs(model_dir)
-                zip_file.extractall(model_dir)
+            with open(zip_file_path, "wb") as of:
+                for data in response.iter_content():
+                    of.write(data)
+                    pbar.update(len(data))
 
             pbar.close()
 
-        except Exception as e:
-            # only remove the model dir on error when it did not exist before
-            if model_does_not_exist:
-                shutil.rmtree(model_dir, ignore_errors=True)
+        except BaseException as e:
+            if os.path.exists(zip_file_path):
+                os.remove(zip_file_path)
             raise e
     else:
-        logger.info(f"model {name} was already downloaded to cache directory {cache_dir}")
+        logger.info(f"model {name} is already downloaded to download directory {download_dir}")
+
+    model_dir = os.path.join(cache_dir, name)
+    model_not_extracted = not os.path.exists(model_dir)
+    if model_not_extracted or force_download:
+        shutil.rmtree(model_dir, ignore_errors=True)
+        _unpack_zip(zip_file_path, model_dir)
 
     experiment_dir = os.listdir(model_dir)
     assert len(experiment_dir) == 1, f"zip file for model {name} should contain exactly one subdirectory, " \
@@ -104,7 +115,7 @@ def get_cpu_info() -> str:
                 match = cpu_regex.match(line)
                 if match is not None:
                     return match.group(1)
-        except Exception:
+        except BaseException:
             return platform.processor()
     return platform.processor()
 
@@ -196,7 +207,7 @@ def generate_report(
     elif precision == torch.float32:
         precision_str = "fp32"
     else:
-        raise ValueError(f"expected precision to be one of torch.float16, torch.bfloat16 or torch.float32")
+        raise ValueError("expected precision to be one of torch.float16, torch.bfloat16 or torch.float32")
 
     report = tables.generate_table(
         header=[

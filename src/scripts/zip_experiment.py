@@ -5,7 +5,7 @@ import zipfile
 
 import torch
 
-from trt.utils import io
+from whitespace_repair.utils import io
 
 
 def zip_experiment(args: argparse.Namespace) -> None:

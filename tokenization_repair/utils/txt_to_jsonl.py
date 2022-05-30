@@ -7,7 +7,7 @@ from typing import Tuple
 import ftfy
 from tqdm import tqdm
 
-from trt.utils import io, nlp
+from whitespace_repair.utils import io, nlp
 
 
 def txt_file_to_jsonl(in_and_out_file: Tuple[str, str]) -> None:

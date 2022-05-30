@@ -1,12 +1,14 @@
 ## Tokenization repair using Transformers
 
+Repair missing or spurious whitespaces in text.
+
 ### Installation
 
 This project is mainly tested with Python 3.8, but should work fine with Python 3.6 and newer versions
 
 ```bash
-git clone git@github.com:ad-freiburg/trt.git
-cd trt
+git clone git@github.com:ad-freiburg/whitespace_repair.git
+cd whitespace_repair
 
 # if you just want to use pretrained models
 pip install .
@@ -20,7 +22,7 @@ pip install .[train]
 #### From python
 
 ```python
-from trt import TokenizationRepairer, get_available_models
+from whitespace_repair import TokenizationRepairer, get_available_models
 
 # list all available models
 print(get_available_models())
@@ -53,33 +55,33 @@ repaired_lines = tok_rep.repair_file("path/to/file.txt", output_file_path="save/
 
 #### From command line
 
-After installation the command `trt` is available in your python environment. It lets you use the tokenization repair
-models directly from the command line. Below are examples of how to use `trt`. See `trt -h` for all options.
+After installation the command `wr` is available in your python environment. It lets you use the tokenization repair
+models directly from the command line. Below are examples of how to use `wr`. See `wr -h` for all options.
 
 ```bash
 # print version
-trt -v
+wr -v
 
 # list available models
-trt -l
+wr -l
 
-# by default trt tries to read stdin, repairs the input it got line by line 
+# by default whitespace_repair tries to read stdin, repairs the input it got line by line 
 # and prints the repaired lines back out
-# therefore, you can for example use trt with pipes
-echo "splitthissentenceforme" | trt
-cat "path/to/input/file.txt" | trt > output.txt
+# therefore, you can for example use whitespace_repair with pipes
+echo "splitthissentenceforme" | wr
+cat "path/to/input/file.txt" | wr > output.txt
 
 # repair a string using
-trt -r "splitthissentenceforme"
+wr -r "splitthissentenceforme"
 
 # repair a text file line by line and print the repaired lines
-trt -f path/to/input/file.txt
+wr -f path/to/input/file.txt
 # optionally specify an output file path where the repaired lines are saved
-trt -f path/to/input/file.txt -o output.txt
+wr -f path/to/input/file.txt -o output.txt
 
 # start an interactive tokenization repair session
 # where your input will be repaired and printed back out
-trt -i
+wr -i
 
 # start a tokenization repair server with the following endpoints:
 ### /models [GET] --> list available models as json 
@@ -87,10 +89,10 @@ trt -i
 ### /repair_file [POST] --> repaired file as json
 ### To specify which model to use, you can use the model query parameter 
 ### (e.g. /repair_file?model=eo_small_arxiv_with_errors), default model is eo_large_arxiv_with_errors
-trt --server <config_file>
+wr --server <config_file>
 
 ### OPTIONS
-### Pass the following flags to the trt command to customize its behaviour
+### Pass the following flags to the whitespace_repair command to customize its behaviour
 -m <model_name> # use a different tokenization repair model than the default one 
 --cpu # force execution on CPU, by default a GPU is used if available
 --progress # display a progress bar (always on when a file is repaired using -f)
@@ -104,11 +106,11 @@ trt --server <config_file>
 --report <file_path> # save a report on the runtime of the model in form of a markdown table in a file
 ```
 
-> Note: When first using `trt` with a pretrained model, the model needs to be downloaded, so depending on
+> Note: When first using `wr` with a pretrained model, the model needs to be downloaded, so depending on
 > your internet speed the command might take considerably longer.
 
 > Note: Loading the tokenization repair model requires an initial startup time each time you
-> invoke the `trt` command. CPU startup time is around 1s, GPU startup time around 3.5s, so for small
+> invoke the `wr` command. CPU startup time is around 1s, GPU startup time around 3.5s, so for small
 > inputs or files you should probably pass the `-c` flag to force CPU execution for best performance.
 
 > Note: The server configuration file must contain a json object with the following keys:
@@ -128,7 +130,7 @@ If you just want to use this project to repair tokenization, this is the recomme
 the names of all available
 
 ```python
-from trt import TokenizationRepairer, get_available_models
+from whitespace_repair import TokenizationRepairer, get_available_models
 
 tok_rep = TokenizationRepairer.from_pretrained(
     # pretrained model to load, get all available models from get_available_models() 
@@ -139,7 +141,7 @@ tok_rep = TokenizationRepairer.from_pretrained(
     use_gpu=True,
     # optional path to a cache directory where pretrained models will be downloaded to,
     # if None, we check the env variable TOKENIZATION_REPAIR_CACHE_DIR, if it is not set 
-    # we use a default cache directory at <trt_install_path>/api/.cache 
+    # we use a default cache directory at <wr_install_path>/api/.cache 
     # (None by default)
     cache_dir=None,
 )
@@ -150,7 +152,7 @@ tok_rep = TokenizationRepairer.from_pretrained(
 Once you trained you model you can use it in the following way
 
 ```python
-from trt import TokenizationRepairer
+from whitespace_repair import TokenizationRepairer
 
 tok_rep = TokenizationRepairer.from_experiment(
     # path to the experiment directory that is created by your training run
@@ -169,8 +171,8 @@ The most important directories you might want to look at are:
 
 ```
 configs -> (example yaml config files for data preprocessing, models and training)
-trt -> (library code used by this project)
-tests -> (unit tests for trt library)
+src -> (library code used by this project)
+tests -> (unit tests for whitespace_repair library)
 tokenization_repair -> (actual tokenization repair project directory)
     benchmark   -> (benchmarks, benchmark results and functionality to run and evaluate benchmarks)
     configs     -> (yaml config files used to preprocess data and 
@@ -196,13 +198,13 @@ if you want to run the container with GPU support. You also need to add '--gpus 
 to the 'docker run' command from above.
 ```
 
-Inside the container the [`trt` command](#from-command-line) is available to you.
+Inside the container the [`wr` command](#from-command-line) is available to you.
 
 If you e.g. have some text files you want to repair using the pretrained models start your container using
 `docker run --gpus all -v <directory_path>:/text_files -it tokenization_repair_transformers` where `<directory_path>`
 contains the text files. Then inside the container you can repair them
-with `trt -f /text_files/file_1.txt -o /text_files/file_1_repaired.txt`.
+with `wr -f /text_files/file_1.txt -o /text_files/file_1_repaired.txt`.
 
-You can also start a tokenization repair server inside the container using `trt --server <config_file>`. Keep in mind
+You can also start a tokenization repair server inside the container using `wr --server <config_file>`. Keep in mind
 that if you want to access the server from outside the container you have to expose the port using
 `docker run --gpus all -p <outside_port>:<server_port> -it tokenization_repair_transformers`.

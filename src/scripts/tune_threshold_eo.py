@@ -8,8 +8,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from trt.model import transformer
-from trt.utils import config, inference, tokenization_repair, common, metrics
+from whitespace_repair.model import transformer
+from whitespace_repair.utils import config, inference, tokenization_repair, common, metrics
 
 
 def evaluate_thresholds(

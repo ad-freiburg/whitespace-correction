@@ -9,8 +9,8 @@ from torch import optim
 from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel
 
-from trt.utils import common
-from trt.utils.lr_schedule import LR_SCHEDULER_TYPE
+from whitespace_repair.utils import common
+from whitespace_repair.utils.lr_schedule import LR_SCHEDULER_TYPE
 
 logger = common.get_logger("IO")
 

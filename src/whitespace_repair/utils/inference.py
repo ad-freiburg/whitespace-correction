@@ -10,7 +10,7 @@ import torch
 from torch import nn
 from torch.nn.utils import rnn
 
-from trt.utils import common, constants
+from whitespace_repair.utils import common, constants
 
 logger = common.get_logger("INFERENCE")
 

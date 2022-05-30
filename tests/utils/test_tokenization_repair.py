@@ -6,7 +6,7 @@ import pytest
 
 from conftest import randomly_delete_whitespaces, randomly_insert_whitespaces
 
-from trt.utils import tokenization_repair
+from whitespace_repair.utils import tokenization_repair
 
 
 class TestTokenizationRepair:

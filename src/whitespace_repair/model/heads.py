@@ -5,8 +5,8 @@ import einops
 import torch
 from torch import nn
 
-from trt.utils import inference
-from trt.utils.config import HeadConfig
+from whitespace_repair.utils import inference
+from whitespace_repair.utils.config import HeadConfig
 
 
 class Head(nn.Module):

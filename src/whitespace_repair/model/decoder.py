@@ -5,10 +5,10 @@ import tokenizers
 import torch
 from torch import nn
 
-from trt.model import tokenizer as toklib
-from trt.model.embedding import Embedding
-from trt.utils import common, constants, io, mask as mask_utils
-from trt.utils.config import EncoderDecoderConfig
+from whitespace_repair.model import tokenizer as toklib
+from whitespace_repair.model.embedding import Embedding
+from whitespace_repair.utils import common, constants, io, mask as mask_utils
+from whitespace_repair.utils.config import EncoderDecoderConfig
 
 logger = common.get_logger("DECODER")
 

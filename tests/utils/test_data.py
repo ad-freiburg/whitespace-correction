@@ -7,9 +7,9 @@ import pytest
 
 import torch
 
-from trt.utils import constants, data
-from trt.utils.data import get_preprocessing_fn
-from trt.utils.tokenization_repair import TokenizationRepairTokens
+from whitespace_repair.utils import constants, data
+from whitespace_repair.utils.data import get_preprocessing_fn
+from whitespace_repair.utils.tokenization_repair import TokenizationRepairTokens
 
 BASE_DIR = os.path.dirname(__file__)
 

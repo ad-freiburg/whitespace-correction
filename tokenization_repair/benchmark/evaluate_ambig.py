@@ -3,7 +3,7 @@ import os
 
 from tqdm import tqdm
 
-from trt.utils import common, tables
+from whitespace_repair.utils import common, tables
 
 
 def parse_args():
@@ -26,7 +26,7 @@ def evaluate(
     with open(groundtruth_file, "r", encoding="utf8") as gtf, \
             open(predicted_file, "r", encoding="utf8") as pf:
         for gt, p in zip(gtf, pf):
-            groundtruths = gt.strip().split(";")
+            groundtruths = [gt_.strip() for gt_ in gt.strip().split("\t")]
             p = p.strip()
             correct.append(p in groundtruths)
 
@@ -43,7 +43,8 @@ if __name__ == "__main__":
         "eo_small_arxiv_with_errors",
         "nmt_large_arxiv_with_errors",
         "nmt_medium_arxiv_with_errors",
-        "nmt_small_arxiv_with_errors"
+        "nmt_small_arxiv_with_errors",
+        "do_nothing"
     ]
 
     results = []

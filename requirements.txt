@@ -1,4 +1,4 @@
-# Dependencies of the trt library (Usage in brackets)
+# Dependencies of the whitespace_repair library (Usage in brackets)
 # These are more or less the same dependenices that get installed during pip install .[train]
 # (expect for mypy, flake8 and pytest)
 

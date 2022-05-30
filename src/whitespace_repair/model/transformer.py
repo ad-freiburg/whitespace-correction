@@ -5,12 +5,12 @@ import tokenizers
 import torch
 from torch import nn
 
-from trt.model.decoder import BaseDecoder, PytorchDecoder
-from trt.model.encoder import BaseEncoder, PytorchEncoder, get_encoder_from_config
-from trt.model.heads import get_head_from_config
-from trt.model.mixins import DecoderMixin, EncoderMixin, InferenceMixin
-from trt.utils import common, constants, inference, io, mask as mask_utils
-from trt.utils.config import ModelConfig
+from whitespace_repair.model.decoder import BaseDecoder, PytorchDecoder
+from whitespace_repair.model.encoder import BaseEncoder, PytorchEncoder, get_encoder_from_config
+from whitespace_repair.model.heads import get_head_from_config
+from whitespace_repair.model.mixins import DecoderMixin, EncoderMixin, InferenceMixin
+from whitespace_repair.utils import common, constants, inference, io, mask as mask_utils
+from whitespace_repair.utils.config import ModelConfig
 
 logger = common.get_logger("MODEL")
 

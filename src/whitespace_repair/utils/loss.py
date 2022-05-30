@@ -3,7 +3,7 @@ from typing import Any
 import torch
 from torch import nn
 
-from trt.utils.config import LossConfig
+from whitespace_repair.utils.config import LossConfig
 
 
 def get_loss_from_config(config: LossConfig,

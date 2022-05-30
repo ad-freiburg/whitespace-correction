@@ -27,10 +27,10 @@ from torch.utils.data import (
     Subset
 )
 
-from trt.model import tokenizer as toklib
-from trt.utils import common, constants, nlp
-from trt.utils.config import TrainConfig, ValConfig
-from trt.utils.tokenization_repair import TokenizationRepairTokens
+from whitespace_repair.model import tokenizer as toklib
+from whitespace_repair.utils import common, constants, nlp
+from whitespace_repair.utils.config import TrainConfig, ValConfig
+from whitespace_repair.utils.tokenization_repair import TokenizationRepairTokens
 
 SAMPLE = Dict[str, Any]
 PREPROCESSING_INPUT_OUTPUT = Union[Dict[str, Any], List[Dict[str, Any]]]

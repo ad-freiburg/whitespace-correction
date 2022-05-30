@@ -2,8 +2,8 @@ from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
-from trt.model.decoder import BaseDecoder
-from trt.model.encoder import BaseEncoder
+from whitespace_repair.model.decoder import BaseDecoder
+from whitespace_repair.model.encoder import BaseEncoder
 
 
 class EncoderMixin:

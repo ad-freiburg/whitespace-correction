@@ -4,8 +4,8 @@ import tempfile
 
 import pytest
 
-from trt.utils import config
-from trt.utils.config import PreprocessingConfig
+from whitespace_repair.utils import config
+from whitespace_repair.utils.config import PreprocessingConfig
 
 BASE_DIR = os.path.dirname(__file__)
 
@@ -46,7 +46,7 @@ class TestDataPreprocessing:
                 cfg_file.write(str(data_preprocessing_config))
 
             # call the preprocessing command as one does from the command line
-            cmd = f"python -m trt.preprocess_data --config {config_path}"
+            cmd = f"python -m whitespace_repair.preprocess_data --config {config_path}"
             p = subprocess.Popen(cmd, shell=True)
             exit_code = p.wait()
 

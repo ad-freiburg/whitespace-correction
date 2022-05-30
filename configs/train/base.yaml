@@ -95,7 +95,7 @@ val:
   #   - str: path to a single lmdb database
   val_data: "example/preprocessed/val_lmdb"
 
-  # list of text metric configs to apply during validation (see trt/utils/metrics.py)
+  # list of text metric configs to apply during validation (see whitespace_repair/utils/metrics.py)
   text_metrics:
     - name: "qualitative_batch_evaluation"
       # optional arguments

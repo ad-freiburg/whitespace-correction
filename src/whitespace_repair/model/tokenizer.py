@@ -5,8 +5,8 @@ from typing import Any, List, Tuple
 import tokenizers
 from tokenizers import PreTokenizedString, decoders, models, normalizers, pre_tokenizers, processors, trainers
 
-from trt.utils import constants
-from trt.utils.tokenization_repair import TokenizationRepairTokens, get_repair_tokens
+from whitespace_repair.utils import constants
+from whitespace_repair.utils.tokenization_repair import TokenizationRepairTokens, get_repair_tokens
 
 
 def _get_default_normalizer() -> normalizers.Sequence:

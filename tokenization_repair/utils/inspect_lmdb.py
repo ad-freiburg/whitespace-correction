@@ -5,7 +5,7 @@ import lmdb
 import msgpack
 from tqdm import tqdm
 
-from trt.utils import common
+from whitespace_repair.utils import common
 
 
 def parse_args():

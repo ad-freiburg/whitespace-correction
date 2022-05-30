@@ -9,7 +9,7 @@ import msgpack
 
 from tqdm.auto import tqdm
 
-from trt.utils import common
+from whitespace_repair.utils import common
 
 
 def parse_args():
