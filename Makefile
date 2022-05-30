@@ -9,5 +9,6 @@ tests:
 
 .PHONY: pypi_release
 pypi_release:
+	rm -r dist
 	python -m build
 	python -m twine upload dist/*
