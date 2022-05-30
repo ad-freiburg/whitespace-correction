@@ -9,9 +9,9 @@ import time
 import torch
 import torch.backends.cudnn
 
-import trt
-from trt import get_available_models, TokenizationRepairer
-from trt.api.utils import generate_report
+import whitespace_repair
+from whitespace_repair import get_available_models, TokenizationRepairer
+from whitespace_repair.api.utils import generate_report
 
 
 def parse_args() -> argparse.Namespace:
@@ -101,7 +101,7 @@ def parse_args() -> argparse.Namespace:
         "-p",
         "--pipe",
         action="store_true",
-        help="Pass this flag when using trt in a pipe because input and output is then treated as an iterator "
+        help="Pass this flag when using whitespace_repair in a pipe because input and output is then treated as an iterator "
              "(note that sorting by length gets disabled with this flag because it is not possible to sort an "
              "iterator)"
     )
@@ -116,7 +116,7 @@ def parse_args() -> argparse.Namespace:
         "-v",
         "--version",
         action="store_true",
-        help="Print the version of the trt library"
+        help="Print the version of the whitespace_repair library"
     )
     parser.add_argument(
         "--force-download",
@@ -145,14 +145,14 @@ def run(args: argparse.Namespace) -> None:
     torch.use_deterministic_algorithms(False)
 
     if args.version:
-        print(f"trt version {trt.__version__}")
+        print(f"whitespace repair version {whitespace_repair.__version__}")
         return
     elif args.list:
         model_str = "\n".join(f"- {model.name}: {model.description}" for model in get_available_models())
         print(f"Available models:\n{model_str}")
         return
     elif args.server is not None:
-        from trt.api.server import run_flask_server
+        from whitespace_repair.api.server import run_flask_server
         run_flask_server(args.server)
         return
 
