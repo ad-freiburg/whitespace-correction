@@ -85,6 +85,7 @@ tok_repairers = TokenizationRepairers()
 @server.after_request
 def after_request(response: Response) -> Response:
     response.headers.add("Access-Control-Allow-Origin", os.environ.get("CORS_ORIGIN", "*"))
+    response.headers.add("Access-Control-Allow-Private-Network", "true")
     return response
 
 
@@ -102,13 +103,13 @@ def get_models() -> Response:
     return response
 
 
-@server.route(f"{server_base_url}/repair_text", methods=["GET"])
+@server.route(f"{server_base_url}/repair_text", methods=["POST"])
 def repair_text() -> Response:
     start = time.perf_counter()
-    text = request.args.get("text")
+    text = request.form.get("text")
     if text is None:
-        # text is a required field, send bad request as status code
-        return abort(Response("required query parameter \"text\" is missing", status=400))
+        return abort(Response("request missing 'text' field in form data", status=400))
+    text = [line.strip() for line in text.splitlines()]
     model = request.args.get("model", tok_repairers.default_model)
     with tok_repairers.get_repairer(model) as tok_rep:
         if isinstance(tok_rep, tuple):
@@ -119,40 +120,10 @@ def repair_text() -> Response:
             repaired = tok_rep.repair_text(text)
     end = time.perf_counter()
     runtime = end - start
-    logger.info(f"Repairing text with {len(text)} chars using model {model} took {runtime:.4f}s")
+    logger.info(f"Repairing text with {sum(len(l) for l in text)} chars using model {model} took {runtime:.2f}s")
     response = jsonify(
         {
             "repaired_text": repaired,
-            "runtime": {
-                "total": runtime,
-                "cps": len(text) / runtime
-            }
-        }
-    )
-    return response
-
-
-@server.route(f"{server_base_url}/repair_file", methods=["POST"])
-def repair_file() -> Response:
-    start = time.perf_counter()
-    text = request.form.get("text")
-    if text is None:
-        return abort(Response("request missing 'text' field in form data", status=400))
-    text = [line.strip() for line in text.splitlines()]
-    model = request.args.get("model", tok_repairers.default_model)
-    with tok_repairers.get_repairer(model) as tok_rep:
-        if isinstance(tok_rep, tuple):
-            message, status_code = tok_rep
-            logger.warning(f"Repairing file aborted with status {status_code}: {message}")
-            return abort(Response(message, status=status_code))
-        else:
-            repaired = tok_rep.repair_text(text)
-    end = time.perf_counter()
-    runtime = end - start
-    logger.info(f"Repairing file with {sum(len(l) for l in text)} chars using model {model} took {runtime:.2f}s")
-    response = jsonify(
-        {
-            "repaired_file": repaired,
             "runtime": {
                 "total": runtime,
                 "cps": sum(len(line) for line in text) / runtime
