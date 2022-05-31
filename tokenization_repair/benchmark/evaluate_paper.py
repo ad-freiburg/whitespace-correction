@@ -75,20 +75,20 @@ if __name__ == "__main__":
 
     models = [
         # baselines
+        "do_nothing",
         "google",
         "wordsegment",
-        "do_nothing",
-        # encoder only
-        "eo_large_arxiv_with_errors",
-        "eo_medium_arxiv_with_errors",
-        "eo_small_arxiv_with_errors",
-        # nmt
-        "nmt_large_arxiv_with_errors",
-        "nmt_medium_arxiv_with_errors",
-        "nmt_small_arxiv_with_errors",
         # previous work
         "the-one",
-        "bid+"
+        "bid+",
+        # nmt
+        "nmt_small_arxiv_with_errors",
+        "nmt_medium_arxiv_with_errors",
+        "nmt_large_arxiv_with_errors",
+        # encoder only
+        "eo_small_arxiv_with_errors",
+        "eo_medium_arxiv_with_errors",
+        "eo_large_arxiv_with_errors",
     ]
 
     horizontal_lines = [
@@ -98,7 +98,6 @@ if __name__ == "__main__":
         True,
         # encoder only
         False,
-        False,
         True,
         # nmt
         False,
@@ -106,7 +105,8 @@ if __name__ == "__main__":
         True,
         # previous work
         False,
-        False
+        False,
+        True
     ]
 
     results = collections.defaultdict(list)
