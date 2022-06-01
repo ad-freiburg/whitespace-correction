@@ -18,7 +18,8 @@ from tqdm import tqdm
 from whitespace_repair.utils import common, constants, tables
 from whitespace_repair.utils.inference import Beam, ScoreFn, log_likelihood_score_fn
 
-_BASE_URL = "https://tokenization.cs.uni-freiburg.de/transformer"
+_BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
+            "EMNLP_tokenization_repair_transformer_BHW_2022.materials"
 _NAME_TO_URL = {
     "eo_large_arxiv_with_errors": f"{_BASE_URL}/eo_large_arxiv_with_errors.zip",
     "eo_small_arxiv_with_errors": f"{_BASE_URL}/eo_small_arxiv_with_errors.zip",
