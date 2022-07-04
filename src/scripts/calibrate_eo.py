@@ -9,8 +9,8 @@ from torch import optim, nn
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from whitespace_repair.model import transformer
-from whitespace_repair.utils import config, inference, tokenization_repair, common
+from whitespace_correction.model import transformer
+from whitespace_correction.utils import config, inference, tokenization_repair, common
 
 
 def calc_bins(preds, labels):

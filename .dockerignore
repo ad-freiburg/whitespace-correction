@@ -1,7 +1,9 @@
-tokenization_repair/data
-tokenization_repair/experiments
-tokenization_repair/third_party
-trt/api/.cache
+whitespace_correction/data
+whitespace_correction/experiments
 .git
 .svn
 __pycache__
+third_party
+dist
+.*cache
+.download

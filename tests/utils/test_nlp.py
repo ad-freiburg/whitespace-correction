@@ -8,9 +8,9 @@ sys.path.append("..")
 import numpy as np
 import pytest
 
-from whitespace_repair.utils import nlp
+from whitespace_correction.utils import nlp
 
-from conftest import randomly_insert_whitespaces
+from tests.conftest import randomly_insert_whitespaces
 
 
 class TestNLP:

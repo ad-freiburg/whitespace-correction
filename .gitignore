@@ -139,8 +139,9 @@ Makefile.slurm
 rsync_exclude.txt
 
 .download
+.tensorrt_cache
 third_party
-tokenization_repair/misspellings
-tokenization_repair/data
-tokenization_repair/experiments
-tokenization_repair/benchmark/downloads
+whitespace_correction/misspellings
+whitespace_correction/data
+whitespace_correction/experiments
+whitespace_correction/benchmark/downloads

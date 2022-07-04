@@ -3,7 +3,7 @@ from typing import Any
 
 import pytest
 
-from whitespace_repair.utils.config import PreprocessingConfig
+from whitespace_correction.utils.config import PreprocessingConfig
 
 
 @pytest.fixture

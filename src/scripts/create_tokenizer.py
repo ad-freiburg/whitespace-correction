@@ -10,8 +10,8 @@ import time
 from collections import Counter, defaultdict
 from typing import Dict, List
 
-from whitespace_repair.model import tokenizer as toklib
-from whitespace_repair.utils import common, io
+from whitespace_correction.model import tokenizer as toklib
+from whitespace_correction.utils import common, io
 
 logger = common.get_logger("TOKENIZERS")
 

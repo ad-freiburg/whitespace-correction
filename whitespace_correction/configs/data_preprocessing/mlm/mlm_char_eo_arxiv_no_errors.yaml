@@ -1,0 +1,21 @@
+data:
+  - "${DATA_INPUT_DIR}/whitespace_correction/mixed/*.jsonl"
+
+output_dir: "${DATA_OUTPUT_DIR}/char_mlm/arxiv_no_errors"
+
+tokenizer: "char"
+
+seed: 22
+
+preprocessing:
+  - type: "character_masked_language_modeling"
+    arguments:
+      word_p: 0.15
+      full_word_p: 0.5
+      seed: 23
+
+lmdb: true
+lmdb_name: "lmdb"
+
+max_sequence_length: 512
+cut_overflowing: true

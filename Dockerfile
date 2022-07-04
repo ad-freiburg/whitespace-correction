@@ -1,13 +1,14 @@
-FROM pytorch/pytorch:1.10.0-cuda11.3-cudnn8-runtime
+FROM nvcr.io/nvidia/pytorch:22.05-py3
 
-WORKDIR /trt
+WORKDIR /wsc
 RUN apt update && apt install -y build-essential
 
 COPY . .
 
 RUN pip install .
 
-ENV TOKENIZATION_REPAIR_DOWNLOAD_DIR=/trt/download
-ENV TOKENIZATION_REPAIR_CACHE_DIR=/trt/cache
-WORKDIR /trt/tokenization_repair
-CMD /trt/tokenization_repair/help.sh
+ENV WHITESPACE_CORRECTION_DOWNLOAD_DIR=/wsc/download
+ENV WHITESPACE_CORRECTION_CACHE_DIR=/wsc/cache
+ENV WHITESPACE_CORRECTION_TENSORRT_CACHE_DIR=/wsc/tensorrt
+WORKDIR /wsc/whitespace_correction
+CMD /wsc/whitespace_correction/help.sh

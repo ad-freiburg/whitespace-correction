@@ -8,8 +8,8 @@ import numpy as np
 import torch
 from tqdm import tqdm
 
-from whitespace_repair.model import transformer
-from whitespace_repair.utils import config, inference, tokenization_repair, common, metrics
+from whitespace_correction.model import transformer
+from whitespace_correction.utils import config, inference, tokenization_repair, common, metrics
 
 
 def evaluate_thresholds(
@@ -48,7 +48,7 @@ def evaluate_thresholds(
     if metric == "sequence_accuracy":
         m = metrics.sequence_accuracy(repaired_sequences, target_sequences)
     elif metric == "tok_rep_f1":
-        m = metrics.tok_rep_f1_prec_rec(repaired_sequences, target_sequences, input_sequences)[0]
+        m = metrics.whitespace_correction_f1_prec_rec(repaired_sequences, target_sequences, input_sequences)[0]
     elif metric == "mned":
         m = -metrics.mean_normalized_sequence_edit_distance(repaired_sequences, target_sequences)
     else:

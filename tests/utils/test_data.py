@@ -7,9 +7,9 @@ import pytest
 
 import torch
 
-from whitespace_repair.utils import constants, data
-from whitespace_repair.utils.data import get_preprocessing_fn
-from whitespace_repair.utils.tokenization_repair import TokenizationRepairTokens
+from whitespace_correction.utils import constants, data
+from whitespace_correction.utils.data import get_preprocessing_fn
+from whitespace_correction.utils.whitespace_correction import WhitespaceCorrectionTokens
 
 BASE_DIR = os.path.dirname(__file__)
 
@@ -284,14 +284,14 @@ class TestData:
 
     @pytest.mark.parametrize("seed", list(range(20)))
     @pytest.mark.parametrize("use_labels", [True, False])
-    def test_tokenization_repair_corruption(self, seed: int, use_labels: bool) -> None:
-        preprocessing_fn = get_preprocessing_fn("tokenization_repair_corruption",
+    def test_whitespace_correction_corruption(self, seed: int, use_labels: bool) -> None:
+        preprocessing_fn = get_preprocessing_fn("whitespace_correction_corruption",
                                                 iw_p=0.5,
                                                 dw_p=0.5,
                                                 use_labels=use_labels,
                                                 seed=seed)
 
-        test_item = {"sequence": "This is a test sentence to test tokenization repair corruption"}
+        test_item = {"sequence": "This is a test sentence to test whitespace correction corruption"}
 
         out_item = preprocessing_fn(test_item)
 
@@ -304,14 +304,12 @@ class TestData:
         else:
             assert "labels" not in out_item
             assert "target_sequence" in out_item
-            assert set(out_item["target_sequence"]) <= {TokenizationRepairTokens.INSERT_WS.value,
-                                                        TokenizationRepairTokens.DELETE_WS.value,
-                                                        TokenizationRepairTokens.KEEP_CHAR.value}
+            assert set(out_item["target_sequence"]) <= set(tok.value for tok in WhitespaceCorrectionTokens)
             assert len(out_item["target_sequence"]) == len(out_item["sequence"])
 
     @pytest.mark.parametrize("output_type", ["repair_token", "char", "label"])
-    def test_tokenization_repair(self, output_type: str) -> None:
-        preprocessing_fn = get_preprocessing_fn("tokenization_repair", output_type=output_type)
+    def test_whitespace_correction(self, output_type: str) -> None:
+        preprocessing_fn = get_preprocessing_fn("whitespace_correction", output_type=output_type)
 
         test_item = {"sequence": "Thi s is atest"}
 

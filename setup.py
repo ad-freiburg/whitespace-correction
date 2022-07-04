@@ -3,13 +3,13 @@ from setuptools import setup, find_packages
 with open("README.md", "r", encoding="utf8") as rdm:
     long_description = rdm.read()
 
-with open("src/whitespace_repair/version.py", "r", encoding="utf8") as vf:
+with open("src/whitespace_correction/version.py", "r", encoding="utf8") as vf:
     version = vf.readlines()[-1].strip().split()[-1].strip("\"'")
 
 setup(
-    name="whitespace_repair",
+    name="whitespace_correction",
     version=version,
-    description="Repair missing or spurious whitespaces in text",
+    description="Correct missing or spurious whitespaces in text.",
     long_description=long_description,
     long_description_content_type="text/markdown",
     author="Sebastian Walter",
@@ -18,7 +18,7 @@ setup(
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     scripts=[
-        "bin/wr"
+        "bin/wsc"
     ],
     install_requires=[
         "torch>=1.8.0",
@@ -36,6 +36,10 @@ setup(
             "msgpack>=1.0.0",
             "tensorboard>=2.8.0",
             "gputil>=1.4.0",
+        ],
+        "inference": [
+            "onnxruntime-gpu==1.11.1",
+            "tensorrt==8.2.5.1"
         ]
     }
 )

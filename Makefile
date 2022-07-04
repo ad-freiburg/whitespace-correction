@@ -1,7 +1,7 @@
 .PHONY: checkstyle
 checkstyle:
 	@echo "Running flake8\n-----------------"
-	flake8 src/whitespace_repair
+	flake8 src/whitespace_correction
 
 .PHONY: tests
 tests:

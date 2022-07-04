@@ -1,0 +1,81 @@
+experiment: "${MODEL_NAME}_whitespace_correction_char2char"
+experiment_dir: ${EXPERIMENT_DIR}
+
+seed: 22
+
+train:
+  num_epochs: ${NUM_EPOCHS:1}
+  train_data: ${LMDB_PATH}
+
+  in_memory: false
+  num_workers: 0
+
+  batch_max_tokens: ${BATCH_MAX_TOKENS}
+  max_seq_length: ${MAX_SEQ_LENGTH:512}
+
+  optimizer:
+    type: "adamw"
+    learning_rate: ${LR:0.0001}
+    weight_decay: 0.01
+
+  lr_scheduler:
+    type: "cosine_with_warmup"
+    arguments:
+      warmup_steps: ${WARMUP_STEPS:16000}
+
+  loss:
+    type: "seq2seq_cross_entropy"
+    arguments:
+      weights: [1, 5, 5, 1, 1, 1, 1, 1, 1]
+
+  swap_inputs_and_targets: false
+  mixed_precision: true
+  eval_interval: ${EVAL_INTERVAL:10000}
+  log_interval: ${LOG_INTERVAL:2500}
+  keep_last_n_checkpoints: 1
+
+val:
+  val_data: 5000
+
+  text_metrics:
+    - name: "qualitative_batch_evaluation_whitespace_correction"
+
+model:
+  name: "${MODEL_NAME}"
+  type: "transformer"
+
+  share_decoder_input_output_embeddings: true
+
+  pretrained: ${PRETRAINED:null}
+
+  encoder:
+    tokenizer: "char"
+
+    embedding_dim: ${MODEL_DIM:512}
+    max_num_embeddings: ${MAX_SEQ_LENGTH:512}
+    learned_positional_embeddings: false
+    norm_embeddings: true
+    model_dim: ${MODEL_DIM:512}
+    feedforward_dim: ${FFN_DIM:2048}
+    attention_heads: ${NUM_HEADS:8}
+    dropout: 0.1
+
+    num_layers: ${NUM_LAYERS}
+    share_parameters: false
+    activation: "gelu"
+
+  decoder:
+    tokenizer: "whitespace_correction"
+
+    embedding_dim: ${MODEL_DIM:512}
+    max_num_embeddings: ${MAX_SEQ_LENGTH:512}
+    learned_positional_embeddings: false
+    norm_embeddings: true
+    model_dim: ${MODEL_DIM:512}
+    feedforward_dim: ${FFN_DIM:2048}
+    attention_heads: ${NUM_HEADS:8}
+    dropout: 0.1
+
+    num_layers: ${NUM_LAYERS}
+    share_parameters: false
+    activation: "gelu"
