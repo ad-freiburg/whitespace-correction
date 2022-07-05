@@ -134,13 +134,13 @@ def repair_text() -> Response:
             logger.warning(f"Correcting text aborted with status {status_code}: {message}")
             return abort(Response(message, status=status_code))
         else:
-            repaired = ws_cor.correct_text(text)
+            corrected = ws_cor.correct_text(text)
     end = time.perf_counter()
     runtime = end - start
     logger.info(f"Correcting text with {sum(len(l) for l in text)} chars using model {model} took {runtime:.2f}s")
     response = jsonify(
         {
-            "corrected_text": repaired,
+            "corrected_text": corrected,
             "runtime": {
                 "total": runtime,
                 "cps": sum(len(line) for line in text) / runtime

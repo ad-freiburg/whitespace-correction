@@ -81,6 +81,8 @@ def download_model(
         raise RuntimeError(f"no URL for model {name}, should not happen")
     url = _NAME_TO_URL[name]
 
+    download_dir = download_dir or get_download_dir()
+
     zip_file_path = os.path.join(download_dir, url.split("/")[-1])
     model_zip_not_downloaded = not os.path.exists(zip_file_path)
     if model_zip_not_downloaded or force_download:
@@ -118,6 +120,8 @@ def download_model(
             raise e
     else:
         logger.info(f"model {name} is already downloaded to download directory {download_dir}")
+
+    cache_dir = cache_dir or get_cache_dir()
 
     model_dir = os.path.join(cache_dir, name)
     model_not_extracted = not os.path.exists(model_dir)

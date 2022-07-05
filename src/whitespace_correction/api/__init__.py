@@ -103,10 +103,10 @@ class WhitespaceCorrector:
             device = "cpu"
 
         self.device = torch.device(device)
-        self.logger.info(f"running tokenization repair on device {get_device_info(self.device)}")
 
         self.cfg = config.Config.from_yaml(os.path.join(model_dir, "config.yaml"))
         self.logger.debug(f"loaded model config:\n{self.cfg.model}")
+        self.logger.info(f"running {self.cfg.model.name} whitespace corrector on device {get_device_info(self.device)}")
 
         self.model = transformer.get_model_from_config(self.cfg.model, self.device)
         best_checkpoint_path = io.glob_safe(os.path.join(model_dir, "checkpoints", "*-checkpoint-best.pt"))[0]
