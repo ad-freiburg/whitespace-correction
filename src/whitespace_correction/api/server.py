@@ -13,7 +13,7 @@ import torch.cuda
 
 from whitespace_correction import version
 from whitespace_correction.api import ModelInfo, WhitespaceCorrector, get_available_models, utils
-from whitespace_correction.utils import common
+from whitespace_correction.utils import common, metrics, nlp
 
 # disable flask startup message and set flask mode to development
 cli.show_server_banner = lambda *_: None
@@ -118,6 +118,52 @@ def get_info() -> Response:
         }
     )
     return response
+
+
+@server.route(f"{server_base_url}/evaluate", methods=["POST"])
+def evaluate() -> Response:
+    start = time.perf_counter()
+    ipt = request.form.get("input")
+    opt = request.form.get("output")
+    gt = request.form.get("groundtruth")
+    if ipt is None or opt is None or gt is None:
+        return abort(Response(
+            "request missing one or more of the required fields 'input', 'output', and 'groundtruth'", status=400
+        ))
+
+    # clean and split, remove empty final line if it exists
+    ipt = [nlp.clean_sequence(i) for i in ipt.split("\n")]
+    opt = [nlp.clean_sequence(o) for o in opt.split("\n")]
+    gt = [nlp.clean_sequence(g) for g in gt.split("\n")]
+    if len(ipt) > 1 and ipt[-1] == "":
+        ipt = ipt[:-1]
+    if len(opt) > 1 and opt[-1] == "":
+        opt = opt[:-1]
+    if len(gt) > 1 and gt[-1] == "":
+        gt = gt[:-1]
+
+    if not len(ipt) == len(opt) and len(opt) == len(gt):
+        return abort(Response(
+            f"expected the same number of inputs, outputs, and groundtruths, but got {(len(ipt), len(opt), len(gt))}",
+            status=400
+        ))
+
+    try:
+        _, _, _, f1, prec, rec = metrics.whitespace_correction_f1_prec_rec(opt, gt, ipt)
+    except AssertionError:
+        return abort(Response(
+            "evaluation failed, make sure all inputs, outputs, and groundtruths only differ in whitespaces",
+            status=400
+        ))
+
+    end = time.perf_counter()
+    logger.info(f"Evaluating text with {sum(len(i) for i in ipt)} chars took {end - start:.2f}s")
+
+    return jsonify({
+        "precision": prec,
+        "recall": rec,
+        "f1": f1
+    })
 
 
 @server.route(f"{server_base_url}/correct_text", methods=["POST"])

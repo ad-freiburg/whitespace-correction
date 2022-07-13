@@ -96,7 +96,7 @@ class WhitespaceCorrector:
     def __init__(self,
                  model_dir: str,
                  device: Union[str, int]) -> None:
-        self.logger = common.get_logger("TOKENIZATION_REPAIR")
+        self.logger = common.get_logger("WHITESPACE_CORRECTION")
 
         if device != "cpu" and not torch.cuda.is_available():
             self.logger.info("could not find a GPU, using CPU as fallback option")
