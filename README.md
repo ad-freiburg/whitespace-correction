@@ -15,8 +15,8 @@ pip install whitespace-correction
 #### From source
 
 ```bash
-git clone git@github.com:ad-freiburg/trt.git
-cd trt
+git clone git@github.com:ad-freiburg/whitespace-correction.git
+cd whitespace-correction
 
 # if you just want to use pretrained models
 pip install .
@@ -201,12 +201,12 @@ whitespace_correction -> (actual whitespace correction project directory)
 
 You can also run this project using docker. Build the image using
 
-`docker build -t whitespace_correction .`
+`docker build -t whitespace-correction .`
 
 After that you can run the project using
 
 ```
-docker run --name wsc -it [--gpus all] --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 whitespace_correction
+docker run --name wsc -it [--gpus all] --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 whitespace-correction
 
 Note
 -----
@@ -219,10 +219,10 @@ to the 'docker run' command from above.
 Inside the container the [`wsc` command](#from-command-line) is available to you.
 
 If you e.g. have some text files you want to repair using the pretrained models start your container using
-`docker run --name wsc --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v <directory_path>:/text_files -it whitespace_correction` where `<directory_path>`
+`docker run --name wsc --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -v <directory_path>:/text_files -it whitespace-correction` where `<directory_path>`
 contains the text files. Then inside the container you can repair them
 with `wsc -f /text_files/file_1.txt -o /text_files/file_1_corrected.txt`.
 
 You can also start a tokenization repair server inside the container using `wsc --server <config_file>`. Keep in mind
 that if you want to access the server from outside the container you have to expose the port using
-`docker run --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -p <outside_port>:<server_port> -it whitespace_correction`.
+`docker run --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 -p <outside_port>:<server_port> -it whitespace-correction`.
