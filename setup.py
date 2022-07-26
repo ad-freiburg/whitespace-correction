@@ -35,7 +35,8 @@ setup(
         "pyyaml>=5.4.0",
         "tqdm>=4.49.0",
         "requests>=2.27.0",
-        "flask>=2.0.0"
+        "flask>=2.0.0",
+        "editdistance>=0.5.0"
     ],
     extras_require={
         "train": [
