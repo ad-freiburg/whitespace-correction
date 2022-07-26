@@ -31,7 +31,6 @@ setup(
         "einops>=0.3.0",
         "numpy>=1.19.0",
         "tokenizers>=0.10.0",
-        "editdistance>=0.5.0",
         "pyyaml>=5.4.0",
         "tqdm>=4.49.0",
         "requests>=2.27.0",
