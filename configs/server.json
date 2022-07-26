@@ -2,12 +2,12 @@
   "host": "localhost",
   "port": 12345,
   "models": [
-    "eo_small_arxiv_with_errors",
-    "eo_medium_arxiv_with_errors",
     "eo_large_arxiv_with_errors",
-    "nmt_small_arxiv_with_errors",
+    "eo_medium_arxiv_with_errors",
+    "eo_small_arxiv_with_errors",
+    "nmt_large_arxiv_with_errors",
     "nmt_medium_arxiv_with_errors",
-    "nmt_large_arxiv_with_errors"
+    "nmt_small_arxiv_with_errors"
   ],
   "timeout": 10,
   "precision": "fp32"

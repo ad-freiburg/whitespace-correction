@@ -12,6 +12,12 @@ setup(
     description="Correct missing or spurious whitespaces in text.",
     long_description=long_description,
     long_description_content_type="text/markdown",
+    url="https://whitespace-correction.cs.uni-freiburg.de",
+    download_url="https://pypi.org/project/whitespace-correction",
+    project_urls={
+        "Website": "https://whitespace-correction.cs.uni-freiburg.de",
+        "Github": "https://github.com/ad-freiburg/whitespace-correction",
+    },
     author="Sebastian Walter",
     author_email="swalter@tf.uni-freiburg.de",
     python_requires=">=3.6",

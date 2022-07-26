@@ -10,7 +10,7 @@ from torch.nn import functional as F
 from tqdm import tqdm
 
 from whitespace_correction.model import transformer
-from whitespace_correction.utils import config, inference, tokenization_repair, common
+from whitespace_correction.utils import config, inference, whitespace_correction, common
 
 
 def calc_bins(preds, labels):
@@ -78,7 +78,7 @@ def calibrate(args: argparse.Namespace) -> None:
                 ):
                     continue
 
-                labels = tokenization_repair.get_whitespace_operations(corrupt_line, correct_line)
+                labels = whitespace_correction.get_whitespace_operations(corrupt_line, correct_line)
                 sequences_and_labels.append((corrupt_line, labels))
 
         sequences_and_labels = sorted(sequences_and_labels, key=lambda e: len(e[0]), reverse=True)

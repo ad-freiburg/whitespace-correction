@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 
 from whitespace_correction.model import transformer
-from whitespace_correction.utils import config, inference, tokenization_repair, common, metrics
+from whitespace_correction.utils import config, inference, whitespace_correction, common, metrics
 
 
 def evaluate_thresholds(
@@ -39,7 +39,7 @@ def evaluate_thresholds(
     repaired_sequences = []
     target_sequences = []
     for pred, (corrupt_sequence, target_sequence) in zip(predictions, sequences):
-        repaired_sequence = tokenization_repair.repair_whitespace(corrupt_sequence, pred)
+        repaired_sequence = whitespace_correction.repair_whitespace(corrupt_sequence, pred)
         input_sequences.append(corrupt_sequence)
         repaired_sequences.append(repaired_sequence)
         target_sequences.append(target_sequence)
@@ -158,14 +158,6 @@ def tune(args: argparse.Namespace) -> None:
                     curr_best_thresholds = [(0.5, t1, t2)]
                 elif m == best_metric:
                     curr_best_thresholds.append((0.5, t1, t2))
-                    # if some thresholds reach the same score according to the metric, take
-                    # the on average more restrictive (higher) ones
-                    # best_t1, best_t2 = best_thresholds[in_dir][1:]
-                    # if (t1 + t2) / 2 > (best_t1 + best_t2) / 2:
-                    #     best_thresholds[in_dir] = (0.5, t1, t2)
-                    #     logger.debug(f"Replaced current best thresholds {(best_t1, best_t2)} with {(t1, t2)}, "
-                    #                  f"because they reached the same score ({args.metric}={m}), but "
-                    #                  f"the last ones are more restrictive (higher) on average")
 
         logger.info(f"Found {len(curr_best_thresholds)} best thresholds: {curr_best_thresholds}")
         curr_best_avg_threshold = list(np.array(curr_best_thresholds).mean(0))

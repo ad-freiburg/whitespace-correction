@@ -38,7 +38,7 @@ def parse_args():
     return parser.parse_args()
 
 
-def _get_word_frequencies(file: str) -> Counter:
+def _get_word_frequencies(file: str) -> str:
     frequencies = Counter()
     words = re.compile(r'(\w+|[^\w\s]+)')
     with open(file, "r", encoding="utf8") as f:
@@ -53,7 +53,7 @@ def _get_word_frequencies(file: str) -> Counter:
     return tmp_file
 
 
-def _get_char_frequencies(file: str) -> Counter:
+def _get_char_frequencies(file: str) -> str:
     frequencies = Counter()
     with open(file, "r", encoding="utf8") as f:
         for line in f:
