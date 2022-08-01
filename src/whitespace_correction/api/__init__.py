@@ -32,32 +32,32 @@ ModelInfo = collections.namedtuple("ModelInfo", ["name", "description"])
 def get_available_models() -> List[ModelInfo]:
     return [
         ModelInfo(
-            name="eo_large_arxiv_with_errors",
+            name="eo_large",
             description="Best overall model, use this for text that might have OCR or spelling errors."
         ),
         ModelInfo(
-            name="eo_medium_arxiv_with_errors",
-            description="Compromise between eo_arxiv_with_errors and eo_small_arxiv_with_errors, "
-                        "faster than eo_arxiv_with_errors but less accurate, "
-                        "slower than eo_small_arxiv_with_errors but more accurate."
+            name="eo_medium",
+            description="Compromise between eo_large and eo_small, "
+                        "faster than eo_large but less accurate, "
+                        "slower than eo_small but more accurate."
         ),
         ModelInfo(
-            name="eo_small_arxiv_with_errors",
+            name="eo_small",
             description="Smallest and fastest, but also the least accurate model. "
                         "Use this when you want to repair text with few whitespace errors and "
                         "little to no OCR or spelling errors fast."
         ),
         ModelInfo(
-            name="nmt_large_arxiv_with_errors",
-            description="NMT model that is similar to eo_large_arxiv_with_errors in size."
+            name="ed_large",
+            description="Encoder-decoder model that is similar to eo_large in size."
         ),
         ModelInfo(
-            name="nmt_medium_arxiv_with_errors",
-            description="NMT model that is similar to eo_medium_arxiv_with_errors in size."
+            name="ed_medium",
+            description="Encoder-decoder model that is similar to eo_medium in size."
         ),
         ModelInfo(
-            name="nmt_small_arxiv_with_errors",
-            description="NMT model that is similar to eo_small_arxiv_with_errors in size."
+            name="ed_small",
+            description="Encoder-decoder model that is similar to eo_small in size."
         )
     ]
 

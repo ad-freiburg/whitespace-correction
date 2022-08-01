@@ -81,14 +81,14 @@ if __name__ == "__main__":
         # previous work
         "the-one",
         "bid+",
-        # nmt
-        "nmt_small_arxiv_with_errors",
-        "nmt_medium_arxiv_with_errors",
-        "nmt_large_arxiv_with_errors",
+        # ed
+        "ed_small",
+        "ed_medium",
+        "ed_large",
         # encoder only
-        "eo_small_arxiv_with_errors",
-        "eo_medium_arxiv_with_errors",
-        "eo_large_arxiv_with_errors",
+        "eo_small",
+        "eo_medium",
+        "eo_large",
     ]
 
     horizontal_lines = [
@@ -99,7 +99,7 @@ if __name__ == "__main__":
         # encoder only
         False,
         True,
-        # nmt
+        # encoder-decoder
         False,
         False,
         True,

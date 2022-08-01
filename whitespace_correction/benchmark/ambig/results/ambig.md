@@ -1,9 +1,9 @@
 | Model | Ambig sequence accuracy |
 | :-- | --: |
-| eo_large_arxiv_with_errors | 65.6 |
-| eo_medium_arxiv_with_errors | 57.4 |
-| eo_small_arxiv_with_errors | 51.0 |
-| nmt_large_arxiv_with_errors | **69.2** |
-| nmt_medium_arxiv_with_errors | 68.9 |
-| nmt_small_arxiv_with_errors | 66.0 |
+| eo_large | 65.6 |
+| eo_medium | 57.4 |
+| eo_small | 51.0 |
+| ed_large | **69.2** |
+| ed_medium | 68.9 |
+| ed_small | 66.0 |
 | do_nothing | 0.0 |

@@ -22,8 +22,6 @@ cd whitespace-correction
 pip install .
 # alternatively, if you also want to train your own models
 pip install .[train]
-# alternatively, if you also want to be able to use onnx and tensorrt for inference
-pip install .[inference]
 
 ```
 
@@ -99,7 +97,7 @@ wsc -i
 ### /info [GET] --> info about backend as json
 ### /correct_text [POST] --> corrected text and runtime information as json
 ### To specify which model to use, you can use the model query parameter 
-### (e.g. /correct_text?model=eo_small_arxiv_with_errors), default model is eo_large_arxiv_with_errors
+### (e.g. /correct_text?model=eo_small), default model is eo_large
 wsc --server <config_file>
 
 ### OPTIONS
@@ -144,8 +142,8 @@ from whitespace_correction import WhitespaceCorrector, get_available_models
 
 ws_cor = WhitespaceCorrector.from_pretrained(
     # pretrained model to load, get all available models from get_available_models() 
-    # (eo_arxiv_with_errors by default)
-    model="eo_arxiv_with_errors",
+    # (eo_large by default)
+    model="eo_large",
     # the device to run the model on
     # ("cuda" by default)
     device="cuda",

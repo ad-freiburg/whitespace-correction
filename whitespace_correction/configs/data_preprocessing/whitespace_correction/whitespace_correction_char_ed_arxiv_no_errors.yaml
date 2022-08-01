@@ -1,7 +1,7 @@
 data:
   - "${DATA_INPUT_DIR}/whitespace_correction/mixed/*.jsonl"
 
-output_dir: "${DATA_OUTPUT_DIR}/char_nmt/whitespace_correction_arxiv_no_errors"
+output_dir: "${DATA_OUTPUT_DIR}/char_ed/whitespace_correction_arxiv_no_errors"
 
 tokenizer: "char"
 target_tokenizer: "whitespace_correction"

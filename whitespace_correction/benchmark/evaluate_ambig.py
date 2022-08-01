@@ -38,12 +38,12 @@ if __name__ == "__main__":
     logger = common.get_logger("EVALUATE_AMBIG")
 
     models = [
-        "eo_large_arxiv_with_errors",
-        "eo_medium_arxiv_with_errors",
-        "eo_small_arxiv_with_errors",
-        "nmt_large_arxiv_with_errors",
-        "nmt_medium_arxiv_with_errors",
-        "nmt_small_arxiv_with_errors",
+        "eo_large",
+        "eo_medium",
+        "eo_small",
+        "ed_large",
+        "ed_medium",
+        "ed_small",
         "do_nothing"
     ]
 

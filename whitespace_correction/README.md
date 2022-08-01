@@ -84,10 +84,10 @@ If you e.g. want to preprocess the Arxiv dataset with spelling and OCR errors fo
 
 `python -m whitespace_correction.preprocess_data --config configs/data_preprocessing/whitespace_correction/whitespace_correction_char_eo_arxiv_with_errors.yaml`
 
-Or if you e.g. want to preprocess the Arxiv dataset without spelling and OCR errors dataset for the NMT models then
+Or if you e.g. want to preprocess the Arxiv dataset with spelling and OCR errors dataset for the ED models then
 execute:
 
-`python -m whitespace_correction.preprocess_data --config configs/data_preprocessing/whitespace_correction/whitespace_correction_char_nmt_arxiv_no_errors.yaml`
+`python -m whitespace_correction.preprocess_data --config configs/data_preprocessing/whitespace_correction/whitespace_correction_char2char_ed_arxiv_with_errors.yaml`
 
 You will need to set environment variables for some configs to work, but you will get error messages when the variables
 are not set.
@@ -106,9 +106,9 @@ If you e.g. want to train an EO model then execute:
 
 `python -m whitespace_correction.train --config configs/train/whitespace_correction/eo.yaml`
 
-Or if you e.g. want to train a NMT model then execute:
+Or if you e.g. want to train an ED model then execute:
 
-`python -m whitespace_correction.train --config configs/train/whitespace_correction/nmt.yaml`
+`python -m whitespace_correction.train --config configs/train/whitespace_correction/char2char_ed.yaml`
 
 > The training code only works for single or multi GPU training on a single node, so if you do want to train on
 > more than one node, for now you will need to rewrite the code to support it.
@@ -123,13 +123,13 @@ are not set.
 Instead of setting the environment variables, you can of course also copy the training config file and overwrite the
 values directly.
 
-| Env variable      | eo_large_arxiv_with_errors | eo_medium_arxiv_with_errors | eo_small_arxiv_with_errors | 
-|-------------------|----------------------------|-----------------------------|----------------------------|
-| MODEL_NAME        | eo_large_arxiv_with_errors | eo_medium_arxiv_with_errors | eo_small_arxiv_with_errors |
-| LMDB_PATH         | <path_to_lmdb>             | <path_to_lmdb>              | <path_to_lmdb>             |
-| BATCH_MAX_TOKENS* | 8192                       | 8192                        | 8192                       |
-| NUM_EPOCHS        | 3                          | 3                           | 3                          |
-| NUM_LAYERS        | 12                         | 6                           | 3                          |
+| Env variable      | eo_large       | eo_medium      | eo_small       | 
+|-------------------|----------------|----------------|----------------|
+| MODEL_NAME        | eo_large       | eo_medium      | eo_small       |
+| LMDB_PATH         | <path_to_lmdb> | <path_to_lmdb> | <path_to_lmdb> |
+| BATCH_MAX_TOKENS* | 8192           | 8192           | 8192           |
+| NUM_EPOCHS        | 3              | 3              | 3              |
+| NUM_LAYERS        | 12             | 6              | 3              |
 
 *The number of tokens per batch is set per training process / GPU, so if you use a different number of GPUs than 8,
 adjust this setting accordingly to keep the overall tokens per batch about the same.

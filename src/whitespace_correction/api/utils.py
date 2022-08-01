@@ -19,14 +19,14 @@ from whitespace_correction.utils import common, constants, tables
 from whitespace_correction.utils.inference import Beam, ScoreFn, log_likelihood_score_fn
 
 _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
-            "EMNLP_tokenization_repair_transformer_BHW_2022.materials"
+            "EMNLP_whitespace_correction_transformer_BHW_2022.materials"
 _NAME_TO_URL = {
-    "eo_large_arxiv_with_errors": f"{_BASE_URL}/eo_large_arxiv_with_errors.zip",
-    "eo_small_arxiv_with_errors": f"{_BASE_URL}/eo_small_arxiv_with_errors.zip",
-    "eo_medium_arxiv_with_errors": f"{_BASE_URL}/eo_medium_arxiv_with_errors.zip",
-    "nmt_large_arxiv_with_errors": f"{_BASE_URL}/nmt_large_arxiv_with_errors.zip",
-    "nmt_medium_arxiv_with_errors": f"{_BASE_URL}/nmt_medium_arxiv_with_errors.zip",
-    "nmt_small_arxiv_with_errors": f"{_BASE_URL}/nmt_small_arxiv_with_errors.zip",
+    "eo_large": f"{_BASE_URL}/eo_large.zip",
+    "eo_small": f"{_BASE_URL}/eo_small.zip",
+    "eo_medium": f"{_BASE_URL}/eo_medium.zip",
+    "ed_large": f"{_BASE_URL}/ed_large.zip",
+    "ed_medium": f"{_BASE_URL}/ed_medium.zip",
+    "ed_small": f"{_BASE_URL}/ed_small.zip",
 }
 
 
