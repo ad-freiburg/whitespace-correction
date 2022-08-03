@@ -9,7 +9,8 @@ from typing import Dict, Generator, List, Optional
 
 from flask import Flask, Response, abort, cli, jsonify, request
 
-import torch.cuda
+import torch
+import torch.backends.cudnn
 
 from whitespace_correction import version
 from whitespace_correction.api import ModelInfo, WhitespaceCorrector, get_available_models, utils
@@ -173,6 +174,7 @@ def correct_text() -> Response:
     if text is None:
         return abort(Response("request missing 'text' field in form data", status=400))
     text = [line.strip() for line in text.splitlines()]
+    num_characters = sum(len(line) for line in text)
     model = request.args.get("model", ws_correctors.default_model)
     with ws_correctors.get_corrector(model) as ws_cor:
         start_correction = time.perf_counter()
@@ -186,7 +188,7 @@ def correct_text() -> Response:
     end = time.perf_counter()
     runtime = end - start
     raw_runtime = end_correction - start_correction
-    logger.info(f"Correcting text with {sum(len(l) for l in text)} chars using model {model} took "
+    logger.info(f"Correcting text with {num_characters} characters using model {model} took "
                 f"{runtime:.2f}s ({raw_runtime:.2f}s raw)")
     response = jsonify(
         {
@@ -194,8 +196,8 @@ def correct_text() -> Response:
             "runtime": {
                 "total": runtime,
                 "raw": raw_runtime,
-                "total_cps": sum(len(line) for line in text) / runtime,
-                "raw_cps": sum(len(line) for line in text) / raw_runtime
+                "total_cps": num_characters / runtime,
+                "raw_cps": num_characters / raw_runtime
             }
         }
     )
@@ -205,6 +207,10 @@ def correct_text() -> Response:
 def run_flask_server(config_path: str) -> None:
     if not os.path.exists(config_path):
         raise RuntimeError(f"server config file {config_path} does not exist")
+
+    torch.backends.cudnn.benchmark = True
+    torch.set_num_threads(len(os.sched_getaffinity(0)))
+    torch.use_deterministic_algorithms(False)
 
     with open(config_path, "r", encoding="utf8") as cfg_file:
         config = json.load(cfg_file)
