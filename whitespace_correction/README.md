@@ -30,7 +30,7 @@ To download the dataset without spelling and OCR errors execute the following co
 
 ```bash
 # download raw text data as tar file and save it under data/raw
-wget -P data/raw https://whitespace-correction.cs.uni-freiburg.de/training_mixed.txt.tar.gz
+wget -P data/raw https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/training_mixed.txt.tar.gz
 # extract tar file into directory data/raw/tokenization_repair_mixed
 mkdir -p data/raw/whitespace_correction_mixed
 tar -xzf data/raw/training_mixed.txt.tar.gz -C data/raw/whitespace_correction_mixed
@@ -51,7 +51,7 @@ To download the dataset with spelling and OCR errors execute the following comma
 
 ```bash
 # download raw text data as tar file and save it under data/raw
-wget -P data/raw https://whitespace-correction.cs.uni-freiburg.de/training_mixed_ocr+spelling.txt.tar.gz
+wget -P data/raw https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/training_mixed_ocr+spelling.txt.tar.gz
 # extract tar file into directory data/raw/whitespace_correction_mixed_ocr_spelling_errors
 mkdir -p data/raw/whitespace_correction_mixed_ocr_spelling_errors
 tar -xzf data/raw/training_mixed_ocr+spelling.txt -C data/raw/whitespace_correction_mixed_ocr_spelling_errors

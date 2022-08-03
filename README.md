@@ -163,9 +163,21 @@ ws_cor = WhitespaceCorrector.from_pretrained(
 )
 ```
 
+When used for the first time with the command line interface or Python API the pretrained model will be automatically downloaded. 
+However, you can also download our pretrained models first as zip files, put them in a directory on your local drive 
+and set `WHITESPACE_CORRECTION_DOWNLOAD_DIR` (or the `download_dir` parameter above) to this directory.
+
+Download links:
+- [eo_large](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/eo_large.zip)
+- [eo_medium](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/eo_medium.zip)
+- [eo_small](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/eo_small.zip)
+- [ed_large](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/ed_large.zip)
+- [ed_medium](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/ed_medium.zip)
+- [ed_small](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/ed_small.zip)
+
 #### Use own model
 
-Once you trained you model you can use it in the following way.
+Once you trained your own model you can use it in the following way.
 
 ```python
 from whitespace_correction import WhitespaceCorrector
