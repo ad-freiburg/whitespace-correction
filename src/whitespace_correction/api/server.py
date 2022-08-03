@@ -62,7 +62,7 @@ class WhitespaceCorrectors:
     def get_corrector(self, name: Optional[str] = None) -> Generator:
         if name is None:
             name = self.default_model
-        # yield either the tokenization repair model or a http status code indicating why this did not work
+        # yield either the whitespace correction model or a http status code indicating why this did not work
         if not self.loaded:
             yield "models were not loaded", 500  # internal error, need to load models before using them
         elif not hasattr(self, name):
@@ -71,7 +71,7 @@ class WhitespaceCorrectors:
             acquired = self.locks[name].acquire(timeout=self.timeout)
             if not acquired:
                 # server capacity is maxed out when acquiring the model did not work within timeout range
-                yield f"server is overloaded with too many requests, failed to reserve tokenization repair model " \
+                yield f"server is overloaded with too many requests, failed to reserve whitespace correction model " \
                       f"within the {self.timeout:.2f}s timeout limit", 503
             else:
                 if name in self.streams:
@@ -167,7 +167,7 @@ def evaluate() -> Response:
 
 
 @server.route(f"{server_base_url}/correct_text", methods=["POST"])
-def repair_text() -> Response:
+def correct_text() -> Response:
     start = time.perf_counter()
     text = request.form.get("text")
     if text is None:
@@ -175,21 +175,27 @@ def repair_text() -> Response:
     text = [line.strip() for line in text.splitlines()]
     model = request.args.get("model", ws_correctors.default_model)
     with ws_correctors.get_corrector(model) as ws_cor:
+        start_correction = time.perf_counter()
         if isinstance(ws_cor, tuple):
             message, status_code = ws_cor
             logger.warning(f"Correcting text aborted with status {status_code}: {message}")
             return abort(Response(message, status=status_code))
         else:
             corrected = ws_cor.correct_text(text)
+        end_correction = time.perf_counter()
     end = time.perf_counter()
     runtime = end - start
-    logger.info(f"Correcting text with {sum(len(l) for l in text)} chars using model {model} took {runtime:.2f}s")
+    raw_runtime = end_correction - start_correction
+    logger.info(f"Correcting text with {sum(len(l) for l in text)} chars using model {model} took "
+                f"{runtime:.2f}s ({raw_runtime:.2f}s raw)")
     response = jsonify(
         {
             "corrected_text": corrected,
             "runtime": {
                 "total": runtime,
-                "cps": sum(len(line) for line in text) / runtime
+                "raw": raw_runtime,
+                "total_cps": sum(len(line) for line in text) / runtime,
+                "raw_cps": sum(len(line) for line in text) / raw_runtime
             }
         }
     )
