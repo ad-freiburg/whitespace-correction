@@ -1,17 +1,13 @@
 data:
-  - "${DATA_INPUT_DIR}/whitespace_correction/mixed/*.jsonl"
+  - "${INPUT_DATA}"
 
-output_dir: "${DATA_OUTPUT_DIR}/char_ed/whitespace_correction_arxiv_no_errors"
+output_dir: "${OUTPUT_DIR}"
 
 tokenizer: "char"
-target_tokenizer: "whitespace_correction"
 
 seed: 22
 
 preprocessing:
-  - type: "substring"
-    arguments:
-      length: 510
   - type: "switch"
     arguments:
       functions:
@@ -30,13 +26,10 @@ preprocessing:
       seed: 23
   - type: "whitespace_correction"
     arguments:
-      output_type: "repair_token"
-      max_length: 510
+      output_type: "label"
+  - type: "whitespace_subsampling"
+    arguments:
+      length: 510
 
-lmdb: true
 lmdb_name: "lmdb"
-
-pretokenize: true
-ensure_equal_length: true
 max_sequence_length: 512
-cut_overflowing: true

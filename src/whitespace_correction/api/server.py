@@ -7,14 +7,14 @@ import threading
 import time
 from typing import Dict, Generator, List, Optional
 
-from flask import Flask, Response, abort, cli, jsonify, request
-
 import torch
 import torch.backends.cudnn
+from flask import Flask, Response, abort, cli, jsonify, request
 
+import utils.whitespace_correction
 from whitespace_correction import version
-from whitespace_correction.api import ModelInfo, WhitespaceCorrector, get_available_models, utils
-from whitespace_correction.utils import common, metrics, nlp
+from whitespace_correction.api import ModelInfo, WhitespaceCorrector, get_available_models
+from whitespace_correction.utils import common, metrics
 
 # disable flask startup message and set flask mode to development
 cli.show_server_banner = lambda *_: None
@@ -133,9 +133,9 @@ def evaluate() -> Response:
         ))
 
     # clean and split, remove empty final line if it exists
-    ipt = [nlp.clean_sequence(i) for i in ipt.split("\n")]
-    opt = [nlp.clean_sequence(o) for o in opt.split("\n")]
-    gt = [nlp.clean_sequence(g) for g in gt.split("\n")]
+    ipt = [utils.whitespace_correction.clean_sequence(i) for i in ipt.split("\n")]
+    opt = [utils.whitespace_correction.clean_sequence(o) for o in opt.split("\n")]
+    gt = [utils.whitespace_correction.clean_sequence(g) for g in gt.split("\n")]
     if len(ipt) > 1 and ipt[-1] == "":
         ipt = ipt[:-1]
     if len(opt) > 1 and opt[-1] == "":

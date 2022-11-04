@@ -3,6 +3,8 @@ import string
 from typing import Tuple
 import sys
 
+import utils.whitespace_correction
+
 sys.path.append("..")
 
 import numpy as np
@@ -41,7 +43,7 @@ class TestNLP:
         cleaned_sequence = randomly_insert_whitespaces(string.ascii_letters, p=0.2, seed=seed).strip()
         uncleaned_sequence = TestNLP.add_noise(cleaned_sequence, p=0.2, seed=seed)
 
-        assert nlp.clean_sequence(uncleaned_sequence) == cleaned_sequence
+        assert utils.whitespace_correction.clean_sequence(uncleaned_sequence) == cleaned_sequence
 
     @pytest.mark.parametrize("token", ["Hello", "Test", "something"])
     @pytest.mark.parametrize("include", [

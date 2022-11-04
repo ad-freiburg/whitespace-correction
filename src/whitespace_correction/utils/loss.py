@@ -1,5 +1,6 @@
 from typing import Any
 
+import einops
 import torch
 from torch import nn
 
@@ -23,20 +24,21 @@ def get_loss(name: str,
     if name == "seq2seq_cross_entropy":
         weight = kwargs.get("weight", None)
         weight = torch.tensor(weight, dtype=torch.float) if weight is not None else None
-
-        loss = nn.CrossEntropyLoss(ignore_index=kwargs["ignore_index"], weight=weight)
+        loss = nn.CrossEntropyLoss(ignore_index=kwargs.get("ignore_index", -1), weight=weight)
         return Seq2SeqLoss(loss=loss)
 
     elif name == "seq2seq_label_smoothed_cross_entropy":
-        loss = LabelSmoothingLogitsLoss(label_smoothing=kwargs["label_smoothing"],
-                                        tgt_vocab_size=kwargs["vocab_size"],
-                                        ignore_index=kwargs["ignore_index"])
+        loss = LabelSmoothingLogitsLoss(
+            label_smoothing=kwargs["label_smoothing"],
+            tgt_vocab_size=kwargs["vocab_size"],
+            ignore_index=kwargs.get("ignore_index", -1)
+        )
         return Seq2SeqLoss(loss=loss)
 
     elif name == "cross_entropy":
         weight = kwargs.get("weight", None)
         weight = torch.tensor(weight, dtype=torch.float) if weight is not None else None
-        loss = nn.CrossEntropyLoss(ignore_index=kwargs.get("ignore_index", -100), weight=weight)
+        loss = nn.CrossEntropyLoss(ignore_index=kwargs.get("ignore_index", -1), weight=weight)
         return loss
 
     elif name == "binary_cross_entropy":
@@ -51,7 +53,7 @@ def get_loss(name: str,
 
 class Seq2SeqLoss(nn.Module):
     """
-    Wrapper class for Seq2Seq losses. Reshapes outputs and labels to use with standard Pytorch losses.
+    Wrapper class for Seq2Seq losses. Rearranges outputs and labels to use with standard Pytorch losses.
     """
 
     def __init__(self, loss: nn.Module):
@@ -60,9 +62,9 @@ class Seq2SeqLoss(nn.Module):
 
     def forward(self, outputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         # outputs are expected to be of shape [S, B, C], reshape to [B * S, C]
-        outputs = outputs.transpose(0, 1).reshape(-1, outputs.shape[-1])
+        outputs = einops.rearrange(outputs, "s b c -> (b s) c")
         # labels are expected to be of shape [B, S], reshape to [B * S]
-        labels = labels.reshape(-1)
+        labels = einops.rearrange(labels, "b s -> (b s)")
         return self.loss(outputs, labels)
 
 
@@ -79,7 +81,7 @@ class LabelSmoothingLogitsLoss(nn.Module):
         smoothing_value = label_smoothing / (tgt_vocab_size - 2)
         one_hot = torch.full((tgt_vocab_size,), smoothing_value)
         one_hot[self.ignore_index] = 0
-        self.register_buffer('one_hot', one_hot.unsqueeze(0))
+        self.register_buffer("one_hot", one_hot.unsqueeze(0))
 
         self.confidence = 1.0 - label_smoothing
 

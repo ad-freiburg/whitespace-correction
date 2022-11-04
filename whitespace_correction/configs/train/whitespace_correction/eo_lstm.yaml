@@ -1,4 +1,4 @@
-experiment: "${MODEL_NAME}_mlm_char"
+experiment: "${MODEL_NAME}_lstm_whitespace_correction_char"
 experiment_dir: ${EXPERIMENT_DIR}
 
 seed: 22
@@ -27,40 +27,44 @@ train:
     type: "seq2seq_cross_entropy"
     arguments:
       ignore_index: -1
+      weights: [1, 5, 5]
 
   swap_inputs_and_targets: false
   mixed_precision: true
-  eval_interval: ${EVAL_INTERVAL:10000}
-  log_interval: ${LOG_INTERVAL:2500}
+  eval_interval: ${EVAL_INTERVAL:0.25}
+  log_interval: ${LOG_INTERVAL:0.01}
   keep_last_n_checkpoints: 1
 
 val:
   val_data: 5000
 
+  text_metrics:
+    - name: "qualitative_batch_evaluation_whitespace_correction"
+
 model:
   name: "${MODEL_NAME}"
-  type: "encoder_with_head"
+  type: "rnn_encoder_with_head"
 
   pretrained: ${PRETRAINED:null}
 
   encoder:
     tokenizer: "char"
 
+    pretrained: ${ENCODER_PRETRAINED:null}
+
     embedding_dim: ${MODEL_DIM:512}
-    max_num_embeddings: ${MAX_SEQ_LENGTH:512}
-    learned_positional_embeddings: false
-    norm_embeddings: true
+    norm_embeddings: false
     model_dim: ${MODEL_DIM:512}
-    feedforward_dim: ${FFN_DIM:2048}
-    attention_heads: ${NUM_HEADS:8}
     dropout: 0.1
 
+    type: lstm
+    bidirectional: true
     num_layers: ${NUM_LAYERS}
-    share_parameters: false
-    activation: "gelu"
 
   head:
     type: "sequence_classification"
     arguments:
       model_dim: ${MODEL_DIM:512}
-      num_classes: 101 # vocab size of char tokenizer
+      num_layers: ${HEAD_NUM_LAYERS:1}
+      num_classes: 3
+

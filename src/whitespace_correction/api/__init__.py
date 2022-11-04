@@ -13,14 +13,13 @@ from torch import autocast
 from tqdm import tqdm
 
 from whitespace_correction.api.utils import (
-    char2char_score_fn,
     download_model,
     get_device_info,
     match_token_ids_ignoring_space_and_unk,
     sliding_windows
 )
-from whitespace_correction.model import tokenizer, transformer
-from whitespace_correction.utils import common, config, constants, inference, io, nlp, whitespace_correction
+from whitespace_correction.model import tokenizer, get_model_from_config
+from whitespace_correction.utils import common, config, constants, inference, io, whitespace_correction
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -108,7 +107,7 @@ class WhitespaceCorrector:
         self.logger.debug(f"loaded model config:\n{self.cfg.model}")
         self.logger.info(f"running {self.cfg.model.name} whitespace corrector on device {get_device_info(self.device)}")
 
-        self.model = transformer.get_model_from_config(self.cfg.model, self.device)
+        self.model = get_model_from_config(self.cfg.model, self.device)
         best_checkpoint_path = io.glob_safe(os.path.join(model_dir, "checkpoints", "*-checkpoint-best.pt"))[0]
         best_checkpoint = io.load_checkpoint(best_checkpoint_path)
         self.model.load_state_dict(best_checkpoint["model_state_dict"])
@@ -117,7 +116,7 @@ class WhitespaceCorrector:
             param.requires_grad = False
 
         if (
-                self.cfg.model.type == "encoder_with_head"
+                self.cfg.model.type == "transformer_encoder_with_head"
                 and self.cfg.model.encoder.tokenizer == "char"
                 and self.cfg.model.head.type == "sequence_classification"
                 and self.cfg.model.head.arguments.get("num_classes", 0) == 3
@@ -163,16 +162,20 @@ class WhitespaceCorrector:
                 and self.cfg.model.decoder.tokenizer == "char"
         ):
             self.char_tokenizer = tokenizer.load_tokenizer("char")
-            self.unk_token_id = self.char_tokenizer.token_to_id(constants.UNK)
+            self.unk_token_id = self.char_tokenizer.unk_token_id
             self.ws_token_id = self.char_tokenizer.token_to_id(" ")
             self.inference_kwargs = {
-                "score_fn": char2char_score_fn(self.char_tokenizer)
+                "score_fn": inference.char2char_score_fn(self.char_tokenizer)
             }
         else:
-            raise RuntimeError("model should either be of type encoder_with_head with a char encoder tokenizer and 3 "
-                               "output classes or of type transformer with both a char encoder and decoder tokenizer")
+            raise RuntimeError(
+                "model should either be of type transformer_encoder_with_head with a char encoder tokenizer and 3 "
+                "output classes or of type transformer with both a char encoder and decoder tokenizer"
+            )
 
-        self.max_length = self.model.encoder.config.max_num_embeddings - 2  # - 2 because of bos and eos tokens
+        # use the training max sequence length here, even though some models work with arbitrary long sequences
+        # (e.g. LSTM), for better accuracy
+        self.max_length = self.cfg.train.max_seq_length - self.model.encoder.tokenizer.num_added_tokens
         self.window_size = math.ceil(0.75 * self.max_length)
         self.context_size = math.floor((self.max_length - self.window_size) / 2)
 
@@ -180,15 +183,9 @@ class WhitespaceCorrector:
 
     def _merge_inference_results(
             self,
-            inference_results: List[
-                Union[
-                    inference.SequenceGenerationInferenceResult,
-                    List[inference.SequenceGenerationInferenceResult],
-                    inference.SequenceClassificationInferenceResult
-                ]
-            ],
+            inference_results: List[inference.RawWhitespaceCorrectionInferenceResult],
             input_str: str
-    ) -> inference.InferenceResult:
+    ) -> inference.WhitespaceCorrectionInferenceResult:
         assert (len(inference_results) > 0)
 
         input_length = len(input_str)
@@ -233,8 +230,8 @@ class WhitespaceCorrector:
                     input_str[window + self.window_size:
                               window + self.window_size + self.context_size]
                 assert (
-                        ir.token_ids[0] == self.char_tokenizer.token_to_id(constants.BOS)
-                        and ir.token_ids[-1] == self.char_tokenizer.token_to_id(constants.EOS)
+                        ir.token_ids[0] == self.char_tokenizer.bos_token_id
+                        and ir.token_ids[-1] == self.char_tokenizer.eos_token_id
                 )
                 from_idx, to_idx = match_token_ids_ignoring_space_and_unk(
                     ir.token_ids[1:-1],
@@ -247,19 +244,16 @@ class WhitespaceCorrector:
                 merged_log_probabilities.extend(ir.token_log_probabilities[1:-1][from_idx: to_idx])
 
             merged_token_ids = (
-                    [self.char_tokenizer.token_to_id(constants.BOS)]
+                    [self.char_tokenizer.bos_token_id]
                     + merged_token_ids
-                    + [self.char_tokenizer.token_to_id(constants.EOS)]
+                    + [self.char_tokenizer.eos_token_id]
             )
             merged_log_probabilities = [0.] + merged_log_probabilities + [0.]
             return inference.SequenceGenerationInferenceResult(merged_token_ids, merged_log_probabilities)
 
     def _inference_result_to_str(
             self,
-            inference_result: Union[
-                inference.SequenceGenerationInferenceResult,
-                inference.SequenceClassificationInferenceResult
-            ],
+            inference_result: inference.WhitespaceCorrectionInferenceResult,
             input_str: str
     ) -> str:
         if isinstance(inference_result, inference.SequenceClassificationInferenceResult):
@@ -294,16 +288,16 @@ class WhitespaceCorrector:
             batch_size: int = 16,
             sort_by_length: bool = True,
             show_progress: bool = False
-    ) -> List[inference.InferenceResult]:
+    ) -> List[inference.WhitespaceCorrectionInferenceResult]:
         # create batches, if an input sequence is too long, split it into multiple sequences using a sliding window
         # approach
-        all_inference_results: Dict[int, List[inference.InferenceResult]] = {}
+        all_inference_results: Dict[int, List[inference.InferenceResult]] = {}  # type: ignore
         batches = []
         for input_idx, ipt in enumerate(inputs):
             length = len(ipt)
             if length <= self.max_length:
                 batches.append((input_idx, 0, length, 0))
-                all_inference_results[input_idx] = [None]
+                all_inference_results[input_idx] = [None]  # type: ignore
             else:
                 windows = sliding_windows(length, self.window_size)
                 for i, window in enumerate(windows):
@@ -395,7 +389,7 @@ class WhitespaceCorrector:
             inputs = [inputs]  # type: ignore
 
         # clean inputs from leading, trailing or multiple whitespaces
-        inputs = [nlp.clean_sequence(ipt) for ipt in inputs]
+        inputs = [whitespace_correction.clean_sequence(ipt) for ipt in inputs]
 
         inference_results = self._repair_text_raw(inputs, batch_size, sort_by_length, show_progress)
 
@@ -420,8 +414,7 @@ class WhitespaceCorrector:
         if output_file_path is not None:
             with open(output_file_path, "w", encoding="utf8") as out_file:
                 for output in outputs:
-                    out_file.write(output)
-                    out_file.write("\n")
+                    out_file.write(output + "\n")
             return None
         else:
             return outputs  # type: ignore

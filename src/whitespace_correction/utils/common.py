@@ -96,3 +96,9 @@ def get_num_parameters(module: nn.Module) -> Dict[str, int]:
         else:
             fixed += p.numel()
     return {"trainable": trainable, "fixed": fixed, "total": trainable + fixed}
+
+
+def constrain(a: Union[int, float], minimum: Union[int, float], maximum: Union[int, float]) -> Union[int, float]:
+    assert minimum <= maximum
+    return min(max(a, minimum), maximum)
+

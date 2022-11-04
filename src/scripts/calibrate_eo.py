@@ -9,7 +9,7 @@ from torch import optim, nn
 from torch.nn import functional as F
 from tqdm import tqdm
 
-from whitespace_correction.model import transformer
+from whitespace_correction.model import get_model_from_config
 from whitespace_correction.utils import config, inference, whitespace_correction, common
 
 
@@ -52,8 +52,8 @@ def calibrate(args: argparse.Namespace) -> None:
     device = torch.device(args.device)
 
     cfg: config.Config = config.Config.from_yaml(os.path.join(args.experiment, "config.yaml"))
-    model = transformer.get_model_from_config(config=cfg.model,
-                                              device=device)
+    model = get_model_from_config(config=cfg.model,
+                                  device=device)
     model = model.eval()
     assert cfg.model.type == "encoder_with_head"
 

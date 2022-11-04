@@ -1,4 +1,4 @@
-experiment: "${MODEL_NAME}_whitespace_correction_char"
+experiment: "${MODEL_NAME}_whitespace_correction_byte"
 experiment_dir: ${EXPERIMENT_DIR}
 
 seed: 22
@@ -15,15 +15,13 @@ train:
 
   optimizer:
     type: "adamw"
-    learning_rate: ${LR:0.00001}
+    learning_rate: ${LR:0.0001}
     weight_decay: 0.01
 
   lr_scheduler:
-    type: "multi_step_with_warmup"
+    type: "cosine_with_warmup"
     arguments:
       warmup_steps: ${WARMUP_STEPS:16000}
-      steps: [0.75, 0.95]
-      factor: 0.1
 
   loss:
     type: "seq2seq_cross_entropy"
@@ -33,8 +31,8 @@ train:
 
   swap_inputs_and_targets: false
   mixed_precision: true
-  eval_interval: ${EVAL_INTERVAL:10000}
-  log_interval: ${LOG_INTERVAL:2500}
+  eval_interval: ${EVAL_INTERVAL:0.25}
+  log_interval: ${LOG_INTERVAL:0.01}
   keep_last_n_checkpoints: 1
 
 val:
@@ -45,12 +43,14 @@ val:
 
 model:
   name: "${MODEL_NAME}"
-  type: "encoder_with_head"
+  type: "transformer_encoder_with_head"
+
+  pretrained: ${PRETRAINED:null}
 
   encoder:
-    tokenizer: "char"
+    tokenizer: "byte"
 
-    pretrained: ${ENCODER_PRETRAINED}
+    pretrained: ${ENCODER_PRETRAINED:null}
 
     embedding_dim: ${MODEL_DIM:512}
     max_num_embeddings: ${MAX_SEQ_LENGTH:512}
@@ -65,9 +65,14 @@ model:
     share_parameters: false
     activation: "gelu"
 
+    # determines how byte representations are grouped to character representations
+    group_name: char_groups
+    group_aggregation: mean
+    group_at: after
+
   head:
     type: "sequence_classification"
     arguments:
       model_dim: ${MODEL_DIM:512}
-      num_layers: ${HEAD_NUM_LAYERS:3}
+      num_layers: ${HEAD_NUM_LAYERS:2}
       num_classes: 3

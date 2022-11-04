@@ -7,10 +7,9 @@ from editdistance import distance as ed
 
 import numpy as np
 
-import tokenizers
-
 import torch
 
+from whitespace_correction.model.tokenizer import Tokenizer
 from whitespace_correction.utils import constants, whitespace_correction
 
 
@@ -224,8 +223,8 @@ class TextMetric(Metric, ABC):
             inputs: Tuple[torch.Tensor, ...],
             outputs: torch.Tensor,
             labels: torch.Tensor,
-            encoder_tokenizer: tokenizers.Tokenizer,
-            decoder_tokenizer: tokenizers.Tokenizer = None,
+            encoder_tokenizer: Tokenizer,
+            decoder_tokenizer: Tokenizer = None,
             **kwargs: Any) -> None:
         self.inputs = inputs
         self.outputs = outputs
@@ -349,7 +348,7 @@ class QualitativeBatchEvaluationWhitespaceCorrection(QualitativeBatchEvaluation)
             input_ids, target_ids = self.inputs
 
         hashtag_token_id = self.encoder_tokenizer.token_to_id("#")
-        unk_token_id = self.encoder_tokenizer.token_to_id(constants.UNK)
+        unk_token_id = self.encoder_tokenizer.unk_token_id
         # replace unk tokens with single char hashtags, because <unk> would not line up with
         # the one label per character rule of tokenization repair
         input_ids[input_ids == unk_token_id] = hashtag_token_id

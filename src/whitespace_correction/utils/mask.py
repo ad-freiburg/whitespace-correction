@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Tuple, List
 
 import torch
 
@@ -237,10 +237,12 @@ def get_attention_masks_from_ids(input_ids: torch.Tensor, target_input_ids: torc
     return get_attention_masks(attention_mask, target_attention_mask)
 
 
-def get_padding_mask(input_ids: torch.Tensor, padding_token_id: int) -> torch.Tensor:
-    """
+def get_padding_mask_from_token_ids(input_ids: torch.Tensor, padding_token_id: int) -> torch.Tensor:
+    return (input_ids.T == padding_token_id).to(torch.bool)
 
-    :param input_ids: tensor of shape [L, B]
-    :param padding_token_id: id of the padding token
-    """
-    return (torch.transpose(input_ids, 0, 1) == padding_token_id).to(torch.bool)
+
+def get_padding_mask_from_lengths(lengths: List[int], device: torch.device) -> torch.Tensor:
+    mask = torch.zeros(len(lengths), max(lengths), dtype=torch.bool)
+    for i, length in enumerate(lengths):
+        mask[i, length:] = True
+    return mask.to(device)

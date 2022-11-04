@@ -20,6 +20,7 @@ def save_checkpoint(checkpoint_path: str,
                     optimizer: optim.Optimizer,
                     step: int,
                     epoch: int,
+                    epoch_step: int,
                     val_loss: float,
                     lr_scheduler: Optional[LR_SCHEDULER_TYPE] = None,
                     grad_scaler: Optional[amp.GradScaler] = None) -> None:
@@ -31,6 +32,8 @@ def save_checkpoint(checkpoint_path: str,
     :param model: Pytorch module
     :param optimizer: Pytorch optimizer
     :param step: Global step (to uniquely identify checkpoint)
+    :param epoch: epoch
+    :param epoch_step: step within epoch
     :param lr_scheduler: Pytorch learning rate scheduler
     :param grad_scaler: Pytorch grad scaler for mixed precision training
     """
@@ -46,6 +49,7 @@ def save_checkpoint(checkpoint_path: str,
         "grad_scaler_state_dict": None if grad_scaler is None else grad_scaler.state_dict(),
         "step": step,
         "epoch": epoch,
+        "epoch_step": epoch_step,
         "val_loss": val_loss
     }
     torch.save(state, f=checkpoint_path)

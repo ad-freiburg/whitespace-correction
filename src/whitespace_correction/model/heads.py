@@ -1,4 +1,4 @@
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Union
 
 import einops
 
@@ -13,10 +13,10 @@ class Head(nn.Module):
     def __init__(self) -> None:
         super().__init__()
 
+    @torch.inference_mode()
     def inference(
             self,
             encodings: torch.Tensor,
-            input_lengths: torch.Tensor,
             **kwargs: Dict[str, Any]
     ) -> List[inference.InferenceResult]:
         raise NotImplementedError()
@@ -42,7 +42,7 @@ class ClassificationHead(Head):
 
         self.head = nn.Sequential(*layers)
 
-    def forward(self, encodings: torch.Tensor) -> torch.Tensor:
+    def forward(self, encodings: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         """
         :param encodings: tensor of shape [S, B, D]
         :return: tensor of shape [B, C]
@@ -51,14 +51,13 @@ class ClassificationHead(Head):
         x = self.head(x)
         return x
 
+    @torch.inference_mode()
     def inference(
             self,
             encodings: torch.Tensor,
-            input_lengths: torch.Tensor,
             **kwargs: Dict[str, Any]
     ) -> List[inference.ClassificationInferenceResult]:
-        with torch.no_grad():
-            head_outputs = self.forward(encodings)
+        head_outputs = self.forward(encodings)
 
         if "no_spaces" in kwargs:
             temperatures, thresholds_and_defaults = inference.get_temperatures_thresholds_and_defaults(**kwargs)
@@ -85,7 +84,7 @@ class SequenceClassificationHead(ClassificationHead):
     def __init__(self, model_dim: int, num_classes: int, num_layers: int = 1):
         super().__init__(model_dim=model_dim, num_classes=num_classes, num_layers=num_layers)
 
-    def forward(self, encodings: torch.Tensor) -> torch.Tensor:
+    def forward(self, encodings: torch.Tensor, **kwargs: Any) -> torch.Tensor:
         """
         :param encodings: tensor of shape [S, B, D]
         :return: tensor of shape [S, B, C]
@@ -93,14 +92,15 @@ class SequenceClassificationHead(ClassificationHead):
         x = self.head(encodings)
         return x
 
+    @torch.inference_mode()
     def inference(
             self,
             encodings: torch.Tensor,
-            input_lengths: torch.Tensor,
+            input_lengths: Optional[Union[List[int], torch.Tensor]] = None,
             **kwargs: Dict[str, Any]
     ) -> List[inference.SequenceClassificationInferenceResult]:
-        with torch.no_grad():
-            head_outputs = self.forward(encodings)
+        assert input_lengths is not None, "input_lengths is required for sequence classification inference"
+        head_outputs = self.forward(encodings)
 
         # batch first
         head_outputs = einops.rearrange(head_outputs, "s b c -> b s c")
@@ -129,11 +129,13 @@ def get_head_from_config(config: HeadConfig, model_dim: int) -> Head:
     kwargs = config.arguments
 
     if config.type == "classification":
+        assert "num_classes" in kwargs, "num_classes is a required argument for a classification head"
         head = ClassificationHead(model_dim=model_dim,
                                   num_classes=kwargs["num_classes"],
                                   num_layers=kwargs.get("num_layers", 1))
 
     elif config.type == "sequence_classification":
+        assert "num_classes" in kwargs, "num_classes is a required argument for a sequence classification head"
         head = SequenceClassificationHead(model_dim=model_dim,
                                           num_classes=kwargs["num_classes"],
                                           num_layers=kwargs.get("num_layers", 1))

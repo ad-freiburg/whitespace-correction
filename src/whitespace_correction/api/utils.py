@@ -8,15 +8,13 @@ from typing import List, Optional, Tuple, Union
 
 import requests
 
-import tokenizers
-
 import torch
 from torch import nn
 
 from tqdm import tqdm
 
+from whitespace_correction.model.tokenizer import Tokenizer
 from whitespace_correction.utils import common, constants, tables
-from whitespace_correction.utils.inference import Beam, ScoreFn, log_likelihood_score_fn
 
 _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
             "EMNLP_whitespace_correction_transformer_BHW_2022.materials"
@@ -179,7 +177,7 @@ def sliding_windows(length: int, window_size: int) -> List[int]:
 
 def match_token_ids_ignoring_space_and_unk(
         token_ids: List[int],
-        tokenizer: tokenizers.Tokenizer,
+        tokenizer: Tokenizer,
         left_context: str,
         window: str,
         right_context: str
@@ -205,9 +203,8 @@ def match_token_ids_ignoring_space_and_unk(
     else:
         window_pattern = window_pattern + r")\s*"
 
-    unk_token_id = tokenizer.token_to_id(constants.UNK)
     search_str = "".join(
-        tokenizer.id_to_token(token_id) if token_id != unk_token_id else "#"
+        tokenizer.id_to_token(token_id) if token_id != tokenizer.unk_token_id else "#"
         for token_id in token_ids
     )
     pattern = re.compile(left_context_pattern + window_pattern + right_context_pattern)
@@ -287,48 +284,3 @@ def generate_report(
         return None
     else:
         return report
-
-
-def char2char_score_fn(char_tokenizer: tokenizers.Tokenizer) -> ScoreFn:
-    bos_token_id = char_tokenizer.token_to_id(constants.BOS)
-    eos_token_id = char_tokenizer.token_to_id(constants.EOS)
-    unk_token_id = char_tokenizer.token_to_id(constants.UNK)
-    ws_token_id = char_tokenizer.token_to_id(" ")
-
-    log_l_score = log_likelihood_score_fn()
-
-    def _score(beam: Beam, input_str_no_spaces: Optional[str] = None) -> float:
-        assert input_str_no_spaces is not None
-        assert beam.token_ids[0] == bos_token_id and len(beam.token_ids) > 1
-
-        pred_token_id = beam.token_ids[-1]
-        token_ids = beam.token_ids[1:-1]
-        prev_pred_token_id = token_ids[-1] if len(token_ids) > 0 else unk_token_id
-
-        input_str_no_spaces_position = sum(token_id != ws_token_id for token_id in token_ids)
-
-        s = log_l_score(beam, None)
-
-        # only allow whitespaces (but not successively), input characters or eos
-        if input_str_no_spaces_position >= len(input_str_no_spaces):
-            # must be eos
-            if pred_token_id != eos_token_id:
-                s -= 1_000_000
-        else:
-            input_token_id = char_tokenizer.token_to_id(
-                input_str_no_spaces[input_str_no_spaces_position]
-            ) or unk_token_id
-            if (
-                    # do not allow:
-                    # 1. two whitespaces in a row
-                    (pred_token_id == ws_token_id and prev_pred_token_id == ws_token_id)
-                    # 2. predicting something else than whitespace or input char
-                    or (pred_token_id != ws_token_id and pred_token_id != input_token_id)
-                    # 3. too early eos
-                    or pred_token_id == eos_token_id
-            ):
-                s -= 1_000_000
-
-        return s
-
-    return _score

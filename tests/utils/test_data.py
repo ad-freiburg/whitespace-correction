@@ -9,7 +9,6 @@ import torch
 
 from whitespace_correction.utils import constants, data
 from whitespace_correction.utils.data import get_preprocessing_fn
-from whitespace_correction.utils.whitespace_correction import WhitespaceCorrectionTokens
 
 BASE_DIR = os.path.dirname(__file__)
 
@@ -282,32 +281,7 @@ class TestData:
         assert out_item["target_sequence"] == test_item["sequence"]
         assert out_item["sequence"] != test_item["sequence"]
 
-    @pytest.mark.parametrize("seed", list(range(20)))
-    @pytest.mark.parametrize("use_labels", [True, False])
-    def test_whitespace_correction_corruption(self, seed: int, use_labels: bool) -> None:
-        preprocessing_fn = get_preprocessing_fn("whitespace_correction_corruption",
-                                                iw_p=0.5,
-                                                dw_p=0.5,
-                                                use_labels=use_labels,
-                                                seed=seed)
-
-        test_item = {"sequence": "This is a test sentence to test whitespace correction corruption"}
-
-        out_item = preprocessing_fn(test_item)
-
-        assert set(test_item["sequence"]) - set(out_item["sequence"]) <= {" "}
-        if use_labels:
-            assert "labels" in out_item
-            assert "target_sequence" not in out_item
-            assert set(out_item["labels"]) <= {0, 1, 2}
-            assert len(out_item["labels"]) == len(out_item["sequence"]) + 2
-        else:
-            assert "labels" not in out_item
-            assert "target_sequence" in out_item
-            assert set(out_item["target_sequence"]) <= set(tok.value for tok in WhitespaceCorrectionTokens)
-            assert len(out_item["target_sequence"]) == len(out_item["sequence"])
-
-    @pytest.mark.parametrize("output_type", ["repair_token", "char", "label"])
+    @pytest.mark.parametrize("output_type", ["char", "label"])
     def test_whitespace_correction(self, output_type: str) -> None:
         preprocessing_fn = get_preprocessing_fn("whitespace_correction", output_type=output_type)
 
@@ -325,10 +299,6 @@ class TestData:
             assert "labels" in out_item
             assert "target_sequence" not in out_item
             assert out_item["labels"] == [0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0]
-        elif output_type == "repair_token":
-            assert "labels" not in out_item
-            assert "target_sequence" in out_item
-            assert out_item["target_sequence"] == "###x######_###"
         else:
             assert "labels" not in out_item
             assert "target_sequence" in out_item

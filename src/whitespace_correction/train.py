@@ -6,13 +6,11 @@ import time
 from contextlib import redirect_stdout
 from datetime import datetime
 from io import StringIO
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Union, Any
 
 import GPUtil
 
 import numpy as np
-
-import tokenizers
 
 import torch
 from torch import distributed as dist
@@ -25,7 +23,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
-from whitespace_correction.model import transformer
+from whitespace_correction.model import Model, get_model_from_config, get_tokenizers_from_model, tokenizer as toklib
 from whitespace_correction.utils import common, config, constants, data, io, loss, lr_schedule, metrics
 from whitespace_correction.utils.lr_schedule import LR_SCHEDULER_TYPE
 from whitespace_correction.utils.optimizer import get_optimizer_from_config
@@ -46,7 +44,7 @@ def parse_args() -> argparse.Namespace:
 
 
 # globals used by training and/or evaluation function
-step: int = 0
+step: int = 0  # overall step across epochs
 steps_to_fast_forward: int = 0
 epoch: int = 0
 best_val_loss: float = float("inf")
@@ -55,48 +53,52 @@ logger = common.get_logger("TRAIN")
 
 def prepare_batch(batch: Dict[str, torch.Tensor],
                   device: torch.device,
-                  model_type: str) -> Tuple[Tuple[torch.Tensor, ...], torch.Tensor]:
-    if model_type == "encoder_with_head":
-        input_ids = batch["input_ids"].to(device, non_blocking=True)
+                  model_type: str) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any], torch.Tensor]:
+    if model_type in {"transformer_encoder_with_head", "rnn_encoder_with_head"}:
+        input_ids = batch.pop("input_ids").to(device, non_blocking=True)
+        labels = batch.pop("labels").to(device, non_blocking=True)
 
-        inputs: Tuple[torch.Tensor, ...] = (input_ids.T,)
-        labels = batch["labels"].to(device, non_blocking=True)
+        inputs = (input_ids.T,)
 
-    elif model_type == "decoder":
-        target_input_ids = batch["input_ids"][:, :-1].to(device, non_blocking=True)
+    elif model_type in {"transformer_decoder"}:
+        input_ids = batch.pop("input_ids").to(device, non_blocking=True)
+        labels = input_ids[:, 1:]
+        input_ids = input_ids[:, :-1]
 
-        inputs = (target_input_ids.T,)
-        labels = batch["input_ids"][:, 1:].to(device, non_blocking=True)
+        inputs = (input_ids.T,)
 
     else:
-        # standard transformer
-        input_ids = batch["input_ids"].to(device, non_blocking=True)
-        target_input_ids = batch["target_input_ids"][:, :-1].to(device, non_blocking=True)
+        # standard encoder decoder model
+        input_ids = batch.pop("input_ids").to(device, non_blocking=True)
+        target_input_ids = batch.pop("target_input_ids").to(device, non_blocking=True)
+        labels = target_input_ids[:, 1:]
+        target_input_ids = target_input_ids[:, :-1]
 
         inputs = (input_ids.T, target_input_ids.T)
-        labels = batch["target_input_ids"][:, 1:].to(device, non_blocking=True)
 
-    return inputs, labels
+    return inputs, batch, labels
 
 
-def train_one_epoch(model: DDP,
-                    encoder_tokenizer: tokenizers.Tokenizer,
-                    decoder_tokenizer: tokenizers.Tokenizer,
-                    train_loader: DataLoader,
-                    val_loader: DataLoader,
-                    optimizer: optim.Optimizer,
-                    criterion: nn.Module,
-                    summary_writer: SummaryWriter,
-                    device: torch.device,
-                    checkpoint_dir: str,
-                    lr_scheduler: Optional[LR_SCHEDULER_TYPE],
-                    mixed_prec_scaler: amp.GradScaler,
-                    eval_interval: int,
-                    log_interval: int,
-                    text_metrics: List[config.MetricConfig],
-                    keep_last_n_checkpoints: int,
-                    model_name: str,
-                    model_type: str) -> None:
+def train_one_epoch(
+        model: DDP,
+        encoder_tokenizer: toklib.Tokenizer,
+        decoder_tokenizer: toklib.Tokenizer,
+        train_loader: DataLoader,
+        val_loader: DataLoader,
+        optimizer: optim.Optimizer,
+        criterion: nn.Module,
+        summary_writer: SummaryWriter,
+        device: torch.device,
+        checkpoint_dir: str,
+        lr_scheduler: Optional[LR_SCHEDULER_TYPE],
+        mixed_prec_scaler: amp.GradScaler,
+        eval_interval: Union[int, float],
+        log_interval: Union[int, float],
+        text_metrics: List[config.MetricConfig],
+        keep_last_n_checkpoints: int,
+        model_name: str,
+        model_type: str
+) -> None:
     global step
     global steps_to_fast_forward
     global best_val_loss
@@ -104,6 +106,11 @@ def train_one_epoch(model: DDP,
     global epoch
 
     rank = dist.get_rank()
+
+    if isinstance(eval_interval, float):
+        eval_interval = common.constrain(int(eval_interval * len(train_loader)), 0, len(train_loader))
+    if isinstance(log_interval, float):
+        log_interval = common.constrain(int(log_interval * len(train_loader)), 0, len(train_loader))
 
     model = model.train()
     model = model.to(device)
@@ -127,16 +134,19 @@ def train_one_epoch(model: DDP,
 
     for batch_num, batch in enumerate(train_loader):
         step += 1
+        epoch_step = steps_to_fast_forward + batch_num + 1
 
-        inputs, labels = prepare_batch(batch=batch,
-                                       device=device,
-                                       model_type=model_type)
+        inputs, kwargs, labels = prepare_batch(
+            batch=batch,
+            device=device,
+            model_type=model_type
+        )
 
         optimizer.zero_grad()
 
         start_forward = time.perf_counter()
         with amp.autocast(enabled=mixed_prec_scaler.is_enabled()):
-            output, loss_dict = model(*inputs)
+            output, loss_dict = model(*inputs, **kwargs)
             end_forward = time.perf_counter()
             loss = criterion(output, labels)
             loss = loss + sum(loss_dict.values())
@@ -160,7 +170,7 @@ def train_one_epoch(model: DDP,
         if lr_scheduler is not None:
             lr_scheduler.step()
 
-        if step % eval_interval == 0 and rank == 0:
+        if epoch_step % eval_interval == 0 and rank == 0:
             val_loss = evaluate(model_type=model_type,
                                 model=model,
                                 encoder_tokenizer=encoder_tokenizer,
@@ -177,6 +187,7 @@ def train_one_epoch(model: DDP,
                                grad_scaler=mixed_prec_scaler,
                                step=step,
                                epoch=epoch,
+                               epoch_step=epoch_step,
                                val_loss=val_loss)
             io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-last.pt"),
                                model=model,
@@ -185,6 +196,7 @@ def train_one_epoch(model: DDP,
                                grad_scaler=mixed_prec_scaler,
                                step=step,
                                epoch=epoch,
+                               epoch_step=epoch_step,
                                val_loss=val_loss)
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
@@ -195,6 +207,7 @@ def train_one_epoch(model: DDP,
                                    grad_scaler=mixed_prec_scaler,
                                    step=step,
                                    epoch=epoch,
+                                   epoch_step=epoch_step,
                                    val_loss=val_loss)
 
             if keep_last_n_checkpoints > 0:
@@ -205,33 +218,33 @@ def train_one_epoch(model: DDP,
 
             model = model.train()
 
-        if step % log_interval == 0 and rank == 0:
+        if epoch_step % log_interval == 0 and rank == 0:
             with StringIO() as buf, redirect_stdout(buf):
                 GPUtil.showUtilization(all=True)
                 util = buf.getvalue().strip()
-                logger.info(f"[{step}] GPU utilization:\n{util}")
+                logger.info(f"[{step}, {epoch_step}] GPU utilization:\n{util}")
 
             if lr_scheduler is not None:
                 lr = lr_scheduler.get_last_lr()[0]
                 summary_writer.add_scalar("train_lr", lr, step)
-                logger.info(f"[{step}] train_lr: {lr:.8f}")
+                logger.info(f"[{step}, {epoch_step}] train_lr: {lr:.8f}")
 
             train_loss = mean_loss.calc()
             summary_writer.add_scalar("train_loss", train_loss, step)
-            logger.info(f"[{step}] train_loss: {train_loss:.8f}")
+            logger.info(f"[{step}, {epoch_step}] train_loss: {train_loss:.8f}")
 
             for loss_name, loss_metric in additional_losses.items():
                 loss_value = loss_metric.calc()
-                logger.info(f"[{step}] train_{loss_name}: {loss_value:.8f}")
+                logger.info(f"[{step}, {epoch_step}] train_{loss_name}: {loss_value:.8f}")
                 summary_writer.add_scalar(f"train_{loss_name}", loss_value, step)
 
             train_mean_bsz = mean_bsz.calc()
             summary_writer.add_scalar("train_mean_bsz", train_mean_bsz, step)
-            logger.info(f"[{step}] train_mean_bsz: {train_mean_bsz:.8f}")
+            logger.info(f"[{step}, {epoch_step}] train_mean_bsz: {train_mean_bsz:.8f}")
 
             train_mean_fwd = mean_forward_pass.calc()
             summary_writer.add_scalar("train_mean_fwd", train_mean_fwd, step)
-            logger.info(f"[{step}] train_mean_fwd: {train_mean_fwd:.8f}")
+            logger.info(f"[{step}, {epoch_step}] train_mean_fwd: {train_mean_fwd:.8f}")
 
             n_bins = 30
             summary_writer.add_histogram("train_bsz_hist",
@@ -245,9 +258,10 @@ def train_one_epoch(model: DDP,
                                          bins=n_bins)
 
             end = time.perf_counter()
-            logger.info(f"[{step}] [train_time:{step - log_interval}\u2192{step}] {(end - start) / 60:.2f} minutes")
-            logger.info(f"[{step}] [epoch:{epoch + 1}] "
-                        f"{common.eta_minutes((end - begin_of_epoch) / 60, batch_num + 1, len(train_loader))}")
+            logger.info(f"[{step}, {epoch_step}] [train_time:{step - log_interval}\u2192{step}] "
+                        f"{(end - start) / 60:.2f} minutes")
+            logger.info(f"[{step}, {epoch_step}] [epoch:{epoch + 1}] "
+                        f"{common.eta_minutes((end - begin_of_epoch) / 60, epoch_step, len(train_loader))}")
 
             mean_forward_pass.reset()
             mean_loss.reset()
@@ -257,15 +271,17 @@ def train_one_epoch(model: DDP,
             start = end
 
 
-def evaluate(model_type: str,
-             model: transformer.TransformerModel,
-             encoder_tokenizer: tokenizers.Tokenizer,
-             decoder_tokenizer: tokenizers.Tokenizer,
-             val_loader: DataLoader,
-             criterion: nn.Module,
-             text_metrics: List[config.MetricConfig],
-             summary_writer: SummaryWriter,
-             device: torch.device) -> float:
+def evaluate(
+        model_type: str,
+        model: Model,
+        encoder_tokenizer: toklib.Tokenizer,
+        decoder_tokenizer: toklib.Tokenizer,
+        val_loader: DataLoader,
+        criterion: nn.Module,
+        text_metrics: List[config.MetricConfig],
+        summary_writer: SummaryWriter,
+        device: torch.device
+) -> float:
     global step
     global logger
 
@@ -280,18 +296,21 @@ def evaluate(model_type: str,
     additional_losses = {}
     rand_batch_idx = torch.randint(low=0, high=len(val_loader), size=(1,)).item()
 
-    tm: List[metrics.TextMetric] = [metrics.get_text_metric(metric_conf.name, **metric_conf.arguments)
-                                    for metric_conf in text_metrics]
+    tm: List[metrics.TextMetric] = [
+        metrics.get_text_metric(metric_conf.name, **metric_conf.arguments)
+        for metric_conf in text_metrics
+    ]
     start = time.perf_counter()
 
     with torch.no_grad():
         for batch_num, batch in enumerate(val_loader):
+            inputs, kwargs, labels = prepare_batch(
+                batch=batch,
+                device=device,
+                model_type=model_type
+            )
 
-            inputs, labels = prepare_batch(batch=batch,
-                                           device=device,
-                                           model_type=model_type)
-
-            output, loss_dict = model(*inputs)
+            output, loss_dict = model(*inputs, **kwargs)
             loss = criterion(output, labels)
             loss = loss + sum(loss_dict.values())
 
@@ -371,19 +390,24 @@ def train(rank: int,
     device = torch.device(f"cuda:{rank}")
     torch.cuda.set_device(rank)
 
-    model = transformer.get_model_from_config(config=cfg.model, device=device)
-    encoder_tokenizer, decoder_tokenizer = transformer.get_tokenizers_from_model(model=model)
+    model = get_model_from_config(config=cfg.model, device=device)
+    encoder_tokenizer, decoder_tokenizer = get_tokenizers_from_model(model=model)
 
-    pad_token_id = encoder_tokenizer.token_to_id(constants.PAD)
-    train_loader, val_loader = data.get_data_from_config(train_config=cfg.train,
-                                                         val_config=cfg.val,
-                                                         seed=cfg.seed,
-                                                         pad_token_id=pad_token_id)
+    input_pad_token_id = encoder_tokenizer.pad_token_id
+    tgt_pad_token_id = decoder_tokenizer.pad_token_id
+    train_loader, val_loader = data.get_data_from_config(
+        train_config=cfg.train,
+        val_config=cfg.val,
+        seed=cfg.seed,
+        input_pad_token_id=input_pad_token_id,
+        target_pad_token_id=tgt_pad_token_id
+    )
 
-    ignore_index = decoder_tokenizer.token_to_id(constants.PAD)
-    criterion = loss.get_loss_from_config(config=cfg.train.loss,
-                                          ignore_index=ignore_index,
-                                          vocab_size=decoder_tokenizer.get_vocab_size())
+    criterion = loss.get_loss_from_config(
+        config=cfg.train.loss,
+        ignore_index=tgt_pad_token_id,
+        vocab_size=decoder_tokenizer.vocab_size
+    )
 
     num_training_steps = len(train_loader) * cfg.train.num_epochs
     optimizer = get_optimizer_from_config(config=cfg.train.optimizer,
@@ -404,9 +428,9 @@ def train(rank: int,
 
         test_sentence = "This is a test sentence."
         if encoder_tokenizer is not None:
-            logger.info(f"Testing encoder tokenizer: {encoder_tokenizer.encode(test_sentence, pair=None).tokens}")
+            logger.info(f"Testing encoder tokenizer: {encoder_tokenizer.split(test_sentence)}")
         if decoder_tokenizer is not None:
-            logger.info(f"Testing decoder tokenizer: {decoder_tokenizer.encode(test_sentence, pair=None).tokens}")
+            logger.info(f"Testing decoder tokenizer: {decoder_tokenizer.split(test_sentence)}")
 
         logger.info(f"Type 'tensorboard --logdir {directories['tensorboard']}' "
                     f"to view the training process in Tensorboard")
@@ -424,40 +448,41 @@ def train(rank: int,
         step = checkpoint["step"]
         epoch = checkpoint["epoch"]
         best_val_loss = checkpoint["val_loss"]
-        steps_to_fast_forward = step % max(len(train_loader), 1)
+        steps_to_fast_forward = checkpoint["epoch_step"]
 
         if rank == 0:
             logger.info(
                 f"Resuming training from checkpoint {last_checkpoint}\n"
-                f"Starting at epoch {epoch + 1} at step {step} with a best validation loss of {best_val_loss}\n"
+                f"Starting at epoch {epoch + 1} at global step {step} with a best validation loss of {best_val_loss}\n"
                 f"Need to fast forward {steps_to_fast_forward} steps"
             )
 
-    ddp_model: transformer.TransformerModel = DDP(model, device_ids=[rank], output_device=rank)
+    ddp_model = DDP(model, device_ids=[rank], output_device=rank)
 
     while epoch < cfg.train.num_epochs:
-        train_loader.batch_sampler: data.DistributedDynamicSampler
         train_loader.batch_sampler.set_epoch(epoch)
         train_loader.batch_sampler.set_steps_to_fast_forward(steps_to_fast_forward)
 
-        train_one_epoch(model=ddp_model,
-                        encoder_tokenizer=encoder_tokenizer,
-                        decoder_tokenizer=decoder_tokenizer,
-                        train_loader=train_loader,
-                        val_loader=val_loader,
-                        optimizer=optimizer,
-                        criterion=criterion,
-                        summary_writer=summary_writer,
-                        device=device,
-                        checkpoint_dir=directories["checkpoints"],
-                        lr_scheduler=lr_scheduler,
-                        mixed_prec_scaler=mixed_prec_scaler,
-                        eval_interval=cfg.train.eval_interval,
-                        log_interval=cfg.train.log_interval,
-                        keep_last_n_checkpoints=cfg.train.keep_last_n_checkpoints,
-                        text_metrics=cfg.val.text_metrics,
-                        model_name=cfg.model.name,
-                        model_type=cfg.model.type)
+        train_one_epoch(
+            model=ddp_model,
+            encoder_tokenizer=encoder_tokenizer,
+            decoder_tokenizer=decoder_tokenizer,
+            train_loader=train_loader,
+            val_loader=val_loader,
+            optimizer=optimizer,
+            criterion=criterion,
+            summary_writer=summary_writer,
+            device=device,
+            checkpoint_dir=directories["checkpoints"],
+            lr_scheduler=lr_scheduler,
+            mixed_prec_scaler=mixed_prec_scaler,
+            eval_interval=cfg.train.eval_interval,
+            log_interval=cfg.train.log_interval,
+            keep_last_n_checkpoints=cfg.train.keep_last_n_checkpoints,
+            text_metrics=cfg.val.text_metrics,
+            model_name=cfg.model.name,
+            model_type=cfg.model.type
+        )
 
         epoch += 1
         steps_to_fast_forward = 0
@@ -468,9 +493,11 @@ def setup_distributed(rank: int, world_size: int) -> None:
     os.environ['MASTER_PORT'] = os.environ.get("TORCH_DIST_PORT", "12345")
 
     # initialize the process group
-    dist.init_process_group("nccl",
-                            rank=rank,
-                            world_size=world_size)
+    dist.init_process_group(
+        "nccl",
+        rank=rank,
+        world_size=world_size
+    )
 
 
 def cleanup_distributed() -> None:

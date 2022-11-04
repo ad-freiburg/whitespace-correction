@@ -4,30 +4,25 @@ from typing import Any, Callable, List, Optional, Tuple, Union
 
 import numpy as np
 
-import tokenizers
-
 import torch
 from torch import nn
 from torch.nn.utils import rnn
 
+from whitespace_correction.model.mixins import EncoderMixin, DecoderMixin
+from whitespace_correction.model.tokenizer import Tokenizer
 from whitespace_correction.utils import common, constants
 
 logger = common.get_logger("INFERENCE")
 
 
 @dataclass
-class InferenceResult:
-    pass
-
-
-@dataclass
-class ClassificationInferenceResult(InferenceResult):
+class ClassificationInferenceResult:
     prediction: int
     logits: List[float] = None
 
 
 @dataclass
-class SequenceClassificationInferenceResult(InferenceResult):
+class SequenceClassificationInferenceResult:
     predictions: List[int]
     logits: List[List[float]] = None
 
@@ -37,7 +32,7 @@ class SequenceClassificationInferenceResult(InferenceResult):
 
 
 @dataclass
-class SequenceGenerationInferenceResult(InferenceResult):
+class SequenceGenerationInferenceResult:
     token_ids: List[int]
     token_log_probabilities: List[float]
 
@@ -48,6 +43,22 @@ class SequenceGenerationInferenceResult(InferenceResult):
     @property
     def length(self) -> int:
         return len(self.token_ids)
+
+
+WhitespaceCorrectionInferenceResult = Union[
+    SequenceGenerationInferenceResult,  # char to char whitespace correction
+    SequenceClassificationInferenceResult  # char classification whitespace correction (encoder only)
+]
+
+RawWhitespaceCorrectionInferenceResult = Union[
+    WhitespaceCorrectionInferenceResult,
+    List[SequenceGenerationInferenceResult]  # char to char whitespace correction with beam search
+]
+
+InferenceResult = Union[
+    WhitespaceCorrectionInferenceResult,
+    ClassificationInferenceResult
+]
 
 
 class Beam:
@@ -78,6 +89,48 @@ def log_likelihood_score_fn(normalize_by_length: bool = True, alpha: float = 1.0
     return _log_l
 
 
+def char2char_score_fn(char_tokenizer: Tokenizer) -> ScoreFn:
+    ws_token_id = char_tokenizer.token_to_id(" ")
+
+    log_l_score = log_likelihood_score_fn()
+
+    def _score(beam: Beam, input_str_no_spaces: Optional[str] = None) -> float:
+        assert input_str_no_spaces is not None
+        assert beam.token_ids[0] == char_tokenizer.bos_token_id and len(beam.token_ids) > 1
+
+        pred_token_id = beam.token_ids[-1]
+        token_ids = beam.token_ids[1:-1]
+        prev_pred_token_id = token_ids[-1] if len(token_ids) > 0 else char_tokenizer.unk_token_id
+
+        input_str_no_spaces_position = sum(token_id != ws_token_id for token_id in token_ids)
+
+        s = log_l_score(beam, None)
+
+        # only allow whitespaces (but not successively), input characters or eos
+        if input_str_no_spaces_position >= len(input_str_no_spaces):
+            # must be eos
+            if pred_token_id != char_tokenizer.eos_token_id:
+                s -= 1_000_000
+        else:
+            input_token_id = char_tokenizer.token_to_id(
+                input_str_no_spaces[input_str_no_spaces_position]
+            ) or char_tokenizer.unk_token_id
+            if (
+                    # do not allow:
+                    # 1. two whitespaces in a row
+                    (pred_token_id == ws_token_id and prev_pred_token_id == ws_token_id)
+                    # 2. predicting something else than whitespace or input char
+                    or (pred_token_id != ws_token_id and pred_token_id != input_token_id)
+                    # 3. too early eos
+                    or pred_token_id == char_tokenizer.eos_token_id
+            ):
+                s -= 1_000_000
+
+        return s
+
+    return _score
+
+
 def greedy_select_fn() -> SelectFn:
     def _greedy(beams: List[Tuple[Beam, float]]) -> Beam:
         return beams[0][0]
@@ -87,7 +140,7 @@ def greedy_select_fn() -> SelectFn:
 
 def sample_select_fn(sample_top_k: int) -> SelectFn:
     def _greedy(beams: List[Tuple[Beam, float]]) -> Beam:
-        sample_idx = torch.randint(min(len(beams), sample_top_k)).item()
+        sample_idx = torch.randint(high=min(len(beams), sample_top_k), size=(1,)).item()
         return beams[sample_idx][0]
 
     return _greedy
@@ -155,20 +208,20 @@ _INFERENCE_METHODS = {"greedy", "sample", "beam"}
 
 
 def sequences_to_ids(sequences: Union[str, List[str]],
-                     tokenizer: tokenizers.Tokenizer,
+                     tokenizer: Tokenizer,
                      device: torch.device,
                      as_list: bool = False) -> Union[torch.Tensor, List[torch.Tensor]]:
     if not isinstance(sequences, list):
         sequences = [sequences]
 
-    encodings = tokenizer.encode_batch(sequences)
-    input_ids = [torch.tensor(enc.ids, device=device, dtype=torch.long) for enc in encodings]
+    tokenizations = tokenizer.tokenize_batch(sequences)
+    input_ids = [torch.tensor(token_ids, device=device, dtype=torch.long) for token_ids, _ in tokenizations]
     if as_list:
         return input_ids
 
     padded_input_ids = rnn.pad_sequence(input_ids,
                                         batch_first=True,
-                                        padding_value=tokenizer.token_to_id(constants.PAD))
+                                        padding_value=tokenizer.pad_token_id)
     return padded_input_ids
 
 
@@ -237,8 +290,9 @@ def batch_encode(model: nn.Module,
                  input_ids: torch.Tensor,
                  max_length: int,
                  device: torch.device,
-                 return_memory_padding_mask: bool = False) -> torch.Tensor:
-    assert hasattr(model, "encode"), "model needs an encode method to be able to used with this function"
+                 return_padding_mask: bool = False) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    assert isinstance(model, EncoderMixin) and isinstance(model, nn.Module), \
+        "model must implement the encoder mixin to be used with this function"
 
     was_training = model.training
     model.to(device)
@@ -254,10 +308,10 @@ def batch_encode(model: nn.Module,
 
     model.train(was_training)
 
-    if return_memory_padding_mask:
-        return encoder_outputs, model.get_memory_key_padding_mask(input_ids.T)
+    if return_padding_mask:
+        return encoder_outputs, model.get_encoder_padding_mask(input_ids)
 
-    return encoder_outputs
+    return encoder_outputs, None
 
 
 def batch_autoregressive_decode(model: nn.Module,
@@ -273,7 +327,8 @@ def batch_autoregressive_decode(model: nn.Module,
                                 decoder_input_ids: Optional[List[torch.Tensor]] = None,
                                 decoder_padding_token_id: Optional[int] = None,
                                 decoder_only: bool = False) -> List[SequenceGenerationInferenceResult]:
-    assert hasattr(model, "decode"), "model needs a decode method to be able to used with this function"
+    assert isinstance(model, DecoderMixin) and isinstance(model, nn.Module), \
+        "model must implement the decoder mixin to be used with this function"
 
     if decoder_only:
         assert encoder_outputs is None and decoder_input_ids is not None and decoder_padding_token_id is not None, \
@@ -290,8 +345,12 @@ def batch_autoregressive_decode(model: nn.Module,
     model.eval()
 
     log_probs = torch.full((B, max_length), fill_value=-1.0, device=device)
-    token_ids = torch.full((B, max_length), fill_value=decoder_padding_token_id if decoder_padding_token_id else -1.0,
-                           dtype=torch.long, device=device)
+    token_ids = torch.full(
+        (B, max_length),
+        fill_value=decoder_padding_token_id or -1.0,
+        dtype=torch.long,
+        device=device
+    )
 
     if decoder_input_ids is not None:
         assert decoder_padding_token_id is not None, "when decoder_input_ids is given, you must also specify " \
@@ -325,8 +384,10 @@ def batch_autoregressive_decode(model: nn.Module,
         target_input_ids = token_ids[indices_to_decode, :max_input_length]
 
         encoder_outputs_i = encoder_outputs[:, indices_to_decode, :] if encoder_outputs is not None else None
-        encoder_padding_mask_i = encoder_padding_mask[indices_to_decode, :] \
+        encoder_padding_mask_i = (
+            encoder_padding_mask[indices_to_decode, :]
             if encoder_padding_mask is not None else None
+        )
 
         with torch.no_grad():
             decoder_output, _ = model.decode(tgt=target_input_ids.T,
@@ -468,7 +529,7 @@ def batch_inference(model: nn.Module,
                                                                     input_ids=input_ids,
                                                                     max_length=max_input_length,
                                                                     device=device,
-                                                                    return_memory_padding_mask=True)
+                                                                    return_padding_mask=True)
 
         return batch_autoregressive_decode(model=model,
                                            bos_token_id=bos_token_id,
@@ -519,7 +580,7 @@ def beam_inference(
                                                                     input_ids=input_ids,
                                                                     max_length=max_input_length,
                                                                     device=device,
-                                                                    return_memory_padding_mask=True)
+                                                                    return_padding_mask=True)
 
     all_beams: List[List[Beam]] = []
 

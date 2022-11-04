@@ -1,7 +1,10 @@
 import math
+from typing import Optional, Any, List, Tuple
 
 import torch
 from torch import nn
+
+from whitespace_correction.utils import whitespace_correction
 
 
 class PositionalEncoding(nn.Module):
@@ -46,17 +49,21 @@ class Embedding(nn.Module):
                  pad_token_id: int,
                  norm_embeddings: bool,
                  dropout: float,
-                 learned_positional_embeddings: bool,
-                 max_num_embeddings: int):
+                 max_num_embeddings: Optional[int] = None,
+                 positional_embeddings: Optional[str] = None,
+                 group_name: Optional[str] = None,
+                 group_aggregation: str = "mean"):
         super().__init__()
         self.num_embeddings = num_embeddings
         self.model_dim = model_dim
-        self.learned_positional_embeddings = learned_positional_embeddings
+        self.positional_embeddings = positional_embeddings
         self.embedding_dim = embedding_dim
         self.pad_token_id = pad_token_id
         self.norm_embeddings = norm_embeddings
         self.dropout = dropout
         self.max_num_embeddings = max_num_embeddings
+        self.group_name = group_name
+        self.group_agg_fn = whitespace_correction.get_aggregation_fn(group_aggregation)
 
         assert self.embedding_dim <= self.model_dim, "embedding_dim cannot be greater than the model_dim"
         self.embedding = nn.Embedding(num_embeddings=self.num_embeddings,
@@ -65,18 +72,24 @@ class Embedding(nn.Module):
         nn.init.normal_(self.embedding.weight, mean=0, std=self.embedding_dim ** -0.5)
         nn.init.constant_(self.embedding.weight[pad_token_id], 0)
 
-        if self.embedding_dim < self.model_dim:
+        if self.embedding_dim != self.model_dim:
             self.proj_embedding = nn.Linear(self.embedding_dim, self.model_dim)
         else:
             self.proj_embedding = nn.Identity()
 
-        if self.learned_positional_embeddings:
+        assert self.positional_embeddings is None or self.positional_embeddings in {"learned", "sin"}, \
+            f"expected positional embeddings to be None or one of learned or sin, but got {self.positional_embeddings}"
+        if self.positional_embeddings == "learned":
+            assert self.max_num_embeddings is not None, "max num embeddings must be specified when using " \
+                                                        "learned positional embeddings"
             self.pos_embedding = nn.Embedding(num_embeddings=self.max_num_embeddings + self.pad_token_id + 1,
                                               embedding_dim=self.model_dim,
                                               padding_idx=self.pad_token_id)
             nn.init.normal_(self.pos_embedding.weight, mean=0, std=self.model_dim ** -0.5)
             nn.init.constant_(self.pos_embedding.weight[pad_token_id], 0)
-        else:
+        elif self.positional_embeddings == "sin":
+            assert self.max_num_embeddings is not None, "max num embeddings must be specified when using " \
+                                                        "sinusoidal positional embeddings"
             self.pos_embedding = PositionalEncoding(model_dim=self.model_dim,
                                                     max_len=self.max_num_embeddings,
                                                     padding_idx=self.pad_token_id)
@@ -99,13 +112,11 @@ class Embedding(nn.Module):
         emb = self.embedding(x) * math.sqrt(self.embedding_dim)
         emb = self.proj_embedding(emb)
 
-        if self.learned_positional_embeddings:
+        if self.positional_embeddings == "learned":
             positions = self._make_positions(x)
-            pos_emb = self.pos_embedding(positions)
-        else:
-            pos_emb = self.pos_embedding(x)
-
-        emb = emb + pos_emb
+            emb = emb + self.pos_embedding(positions)
+        elif self.positional_embeddings == "sin":
+            emb = emb + self.pos_embedding(x)
 
         if self.norm_embeddings:
             emb = self.norm(emb)

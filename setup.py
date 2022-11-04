@@ -30,7 +30,6 @@ setup(
         "torch>=1.8.0",
         "einops>=0.3.0",
         "numpy>=1.19.0",
-        "tokenizers>=0.10.0",
         "pyyaml>=5.4.0",
         "tqdm>=4.49.0",
         "requests>=2.27.0",

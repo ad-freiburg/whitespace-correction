@@ -31,8 +31,8 @@ train:
 
   swap_inputs_and_targets: false
   mixed_precision: true
-  eval_interval: ${EVAL_INTERVAL:10000}
-  log_interval: ${LOG_INTERVAL:2500}
+  eval_interval: ${EVAL_INTERVAL:0.25}
+  log_interval: ${LOG_INTERVAL:0.01}
   keep_last_n_checkpoints: 1
 
 val:
@@ -43,7 +43,7 @@ val:
 
 model:
   name: "${MODEL_NAME}"
-  type: "encoder_with_head"
+  type: "transformer_encoder_with_head"
 
   pretrained: ${PRETRAINED:null}
 
@@ -71,4 +71,3 @@ model:
       model_dim: ${MODEL_DIM:512}
       num_layers: ${HEAD_NUM_LAYERS:1}
       num_classes: 3
-

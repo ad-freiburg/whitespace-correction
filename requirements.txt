@@ -6,7 +6,6 @@
 torch>=1.8.0 # (Tensor operations and neural network components)
 einops>=0.3.0 # (Einstein operators for PyTorch)
 numpy>=1.19.0 # (General purpose math operations)
-tokenizers>=0.10.0 # (Fast tokenizer implementations)
 
 # configuration
 pyyaml>=5.4.0 # (Reading and writing yaml config files)

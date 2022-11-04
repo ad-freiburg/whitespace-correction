@@ -1,18 +1,11 @@
+import random
 import re
-from enum import Enum
-from typing import List, Union
+import itertools
+from typing import List, Union, Tuple, Optional, Callable
 
-
-class WhitespaceCorrectionTokens(Enum):
-    KEEP_CHAR = "#"  # "<k>"
-    INSERT_WS = "_"  # "<iw>"
-    DELETE_WS = "x"  # "<dw>"
-
-
-def get_correction_tokens(repair_sequence: str) -> List[str]:
-    return re.findall(f"({WhitespaceCorrectionTokens.DELETE_WS.value}"
-                      f"|{WhitespaceCorrectionTokens.INSERT_WS.value}"
-                      f"|{WhitespaceCorrectionTokens.KEEP_CHAR.value})", repair_sequence)
+import einops
+import torch
+from torch.nn.utils import rnn
 
 
 def remove_whitespace(sequence: str) -> str:
@@ -63,39 +56,24 @@ def get_whitespace_operations(from_sequence: str, to_sequence: str) -> List[int]
     return repair_tokens
 
 
-def repair_whitespace(sequence: str, repair_sequence: Union[str, List[int]]) -> str:
+def repair_whitespace(sequence: str, repair_tokens: List[int]) -> str:
     """
 
-    Repair the white spacing in the given sequence using the given repair_sequence.
+    Repair the white spacing in the given sequence using the given repair tokens.
 
     :param sequence: string which has to be repaired
-    :param repair_sequence: string containing instructions on how to repair or list with 0's, 1's and 2's
-        indicating to keep the char, insert a whitespace or delete a whitespace.
-        indicate padding positions.
+    :param repair_tokens: list with 0's, 1's and 2's indicating to keep the char, insert a whitespace
+        or delete a whitespace.
     :return: repaired string
     """
-    if isinstance(repair_sequence, str):
-        repair_tokens = []
-        for c in repair_sequence:
-            if c == WhitespaceCorrectionTokens.KEEP_CHAR.value:
-                repair_tokens.append(0)
-            elif c == WhitespaceCorrectionTokens.INSERT_WS.value:
-                repair_tokens.append(1)
-            elif c == WhitespaceCorrectionTokens.DELETE_WS.value:
-                repair_tokens.append(2)
-            else:
-                raise ValueError(f"Only #|x|_ are allowed in repair sequence, but got {c}")
-    else:
-        repair_tokens = repair_sequence
-
     if len(sequence) > len(repair_tokens):
         repair_tokens.extend([0] * (len(sequence) - len(repair_tokens)))
     else:
         repair_tokens = repair_tokens[:len(sequence)]
 
     allowed_tokens = {0, 1, 2}
-    assert all([token in allowed_tokens for token in repair_tokens]), \
-        f"Only 0's, 1's and 2's are allowed as repair tokens, but got {repair_tokens} for sequence \"{sequence}\""
+    assert all(token in allowed_tokens for token in repair_tokens), \
+        f"only 0's, 1's and 2's are allowed as repair tokens, but got {repair_tokens} for sequence \"{sequence}\""
 
     sequence_ptr = 0
     token_ptr = 0
@@ -123,3 +101,87 @@ def repair_whitespace(sequence: str, repair_sequence: Union[str, List[int]]) -> 
         token_ptr += 1
 
     return repaired_sequence
+
+
+def clean_sequence(sequence: str) -> str:
+    """
+
+    Replace all multiple whitespaces, tabs, linebreaks etc. with single whitespaces.
+
+    :param sequence: string
+    :return: cleaned string
+    """
+    # about 5 times faster than re.sub("\s+", " ", sequence)
+    return " ".join(sequence.strip().split())
+
+
+def find_word_boundaries(s: str) -> List[Tuple[int, int]]:
+    # this function assumes that s is cleaned with clean_sequence above
+    boundaries = []
+    start_idx = 0
+    for word in s.split():
+        end_idx = start_idx + len(word)
+        boundaries.append((start_idx, end_idx))
+        start_idx = end_idx + 1
+    return boundaries
+
+
+def random_character_substring(
+        s: str,
+        num_chars: int,
+        rand: random.Random
+) -> Optional[Tuple[int, int]]:
+    if s == "":
+        return 0, 0
+    start = rand.randint(0, max(0, len(s) - num_chars))
+    return start, min(len(s), start + num_chars)
+
+
+def _find_subsequences_with_sum_close_to_but_max_k(
+        values: List[int],
+        k: int
+) -> List[Tuple[int, int]]:
+    if len(values) == 0:
+        return []
+    # this is linear
+    cum_values = list(itertools.accumulate(values))
+    if cum_values[-1] <= k:
+        return [(0, len(cum_values))]
+    start = 0
+    # move start pointer to first valid start position (element smaller or equal to k)
+    while start < len(values) and values[start] > k:
+        start += 1
+    if start >= len(values):
+        return []
+    end = start
+    subsequences = []
+    while start < len(cum_values) and end < len(cum_values):
+        next_end_v = values[end + 1] if end + 1 < len(cum_values) else 0
+        if next_end_v > k:
+            subsequences.append((start, end + 1))
+            start = end + 2
+            end = start
+        else:
+            cum_next_end_v = cum_values[end] + next_end_v
+            cum_up_to_start = cum_values[start] - values[start]
+            if cum_next_end_v - cum_up_to_start > k:
+                if len(subsequences) == 0 or subsequences[-1][1] < end + 1:
+                    subsequences.append((start, end + 1))
+                start += 1
+            else:
+                end += 1
+    if start != end:
+        subsequences.append((start, end))
+    return subsequences
+
+
+def random_byte_substring(
+        s: str,
+        max_bytes: int,
+        rand: random.Random
+) -> Tuple[int, int]:
+    if s == "":
+        return 0, 0
+    num_bytes = list(itertools.accumulate(len(c.encode("utf8")) for c in s))
+    possible_subsequences = _find_subsequences_with_sum_close_to_but_max_k(num_bytes, max_bytes)
+    return rand.choice(possible_subsequences)
