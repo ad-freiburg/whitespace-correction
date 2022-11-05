@@ -108,8 +108,6 @@ class PytorchEncoder(BaseEncoder):
                                    positional_embeddings=self.config.positional_embeddings,
                                    max_num_embeddings=self.config.max_num_embeddings,
                                    norm_embeddings=self.config.norm_embeddings,
-                                   group_name=self.config.embedding_group_name,
-                                   group_aggregation=self.config.embedding_group_aggregation,
                                    dropout=self.config.dropout)
 
         if custom_encoder_layer is not None:
@@ -226,7 +224,7 @@ class PytorchDecoder(BaseDecoder):
             )
 
         self.out_proj = nn.Linear(in_features=self.config.model_dim,
-                                  out_features=self.tokenizer.get_vocab_size())
+                                  out_features=self.tokenizer.vocab_size)
 
         if self.config.pretrained:
             checkpoint = io.load_checkpoint(self.config.pretrained)
@@ -316,7 +314,7 @@ class TransformerModel(nn.Module, EncoderMixin, DecoderMixin, InferenceMixin):
                     self.encoder.config.embedding_dim == self.decoder.config.embedding_dim
                     and self.encoder.config.positional_embeddings == self.decoder.config.positional_embeddings
                     and self.encoder.config.max_num_embeddings == self.decoder.config.max_num_embeddings
-                    and self.encoder.tokenizer.get_vocab_size() == self.decoder.tokenizer.get_vocab_size()
+                    and self.encoder.tokenizer.vocab_size == self.decoder.tokenizer.vocab_size
                     and self.encoder.config.dropout == self.decoder.config.dropout
             ), \
                 f"to share the embeddings between the encoder and decoder, they must have the same " \
@@ -449,9 +447,11 @@ class TransformerEncoderModelWithHead(nn.Module, EncoderMixin, InferenceMixin):
         encodings, enc_loss_dict = self.encode(input_ids, src_mask)
         return self.head(encodings), enc_loss_dict
 
-    def inference(self,
-                  sequences: Union[str, List[str]],
-                  **kwargs: Any) -> List[inference.InferenceResult]:
+    def inference(
+            self,
+            sequences: Union[str, List[str]],
+            **kwargs: Any
+    ) -> List[inference.InferenceResult]:
         assert not self.training, "model cannot be in training mode during inference"
 
         input_ids: torch.Tensor = inference.sequences_to_ids(sequences=sequences,
@@ -466,10 +466,11 @@ class TransformerEncoderModelWithHead(nn.Module, EncoderMixin, InferenceMixin):
             return_padding_mask=True
         )
 
-        input_lengths = self.get_input_lengths(input_ids, encoder_padding_mask)
-        return self.head.inference(encodings=encoder_outputs,
-                                   input_lengths=input_lengths,
-                                   **kwargs)
+        kwargs["input_lengths"] = self.get_input_lengths(input_ids, encoder_padding_mask)
+        return self.head.inference(
+            encodings=encoder_outputs,
+            **kwargs
+        )
 
 
 class TransformerDecoderModel(nn.Module, DecoderMixin, InferenceMixin):
@@ -487,7 +488,7 @@ class TransformerDecoderModel(nn.Module, DecoderMixin, InferenceMixin):
                                       decoder_only=True)
 
         self.out_proj = nn.Linear(in_features=self.config.decoder.model_dim,
-                                  out_features=self.decoder.tokenizer.get_vocab_size())
+                                  out_features=self.decoder.tokenizer.vocab_size)
 
         if self.config.pretrained:
             checkpoint = io.load_checkpoint(self.config.pretrained)

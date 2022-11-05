@@ -130,7 +130,7 @@ def random_character_substring(
         s: str,
         num_chars: int,
         rand: random.Random
-) -> Optional[Tuple[int, int]]:
+) -> Tuple[int, int]:
     if s == "":
         return 0, 0
     start = rand.randint(0, max(0, len(s) - num_chars))

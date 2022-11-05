@@ -596,15 +596,25 @@ def _whitespace_subsampling(
 
     def _preprocessing_fn(seq: PreprocessingInputOutput) -> PreprocessingInputOutput:
         def _sub(item: Dict[str, str]) -> Dict[str, str]:
-            assert "sequence" in item
+            assert "sequence" in item and ("labels" in item or "target_sequence" in item)
 
-            if len(item["sequence"]) > length:
+            item["sequence"] = whitespace_correction.clean_sequence(item["sequence"])
 
-                start_idx = rand.randint(0, len(item["sequence"]) - length)
-                item["sequence"] = item["sequence"][start_idx:start_idx + length]
-                assert len(item["sequence"]) == length
+            if unit == "char":
+                start, end = whitespace_correction.random_character_substring(item["sequence"], length, rand)
+            else:
+                start, end = whitespace_correction.random_byte_substring(item["sequence"], length, rand)
 
-            return {"sequence": item["sequence"]}
+            item["sequence"] = item["sequence"][start:end]
+            if "labels" in item:
+                item["labels"] = item["labels"][start + 1: end + 1]
+            else:
+                target_sequence = whitespace_correction.clean_sequence(item["target_sequence"])
+                target_start, target_end = ...
+                item["target_sequence"] = target_sequence[target_start: target_end]
+                assert item["sequence"].replace(" ", "") == item["target_sequence"].replace(" ", "")
+
+            return item
 
         if isinstance(seq, list):
             seq = [_sub(t.copy()) for t in seq]

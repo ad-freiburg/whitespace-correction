@@ -1,10 +1,8 @@
 import math
-from typing import Optional, Any, List, Tuple
+from typing import Optional
 
 import torch
 from torch import nn
-
-from whitespace_correction.utils import whitespace_correction
 
 
 class PositionalEncoding(nn.Module):
@@ -50,9 +48,7 @@ class Embedding(nn.Module):
                  norm_embeddings: bool,
                  dropout: float,
                  max_num_embeddings: Optional[int] = None,
-                 positional_embeddings: Optional[str] = None,
-                 group_name: Optional[str] = None,
-                 group_aggregation: str = "mean"):
+                 positional_embeddings: Optional[str] = None):
         super().__init__()
         self.num_embeddings = num_embeddings
         self.model_dim = model_dim
@@ -62,8 +58,6 @@ class Embedding(nn.Module):
         self.norm_embeddings = norm_embeddings
         self.dropout = dropout
         self.max_num_embeddings = max_num_embeddings
-        self.group_name = group_name
-        self.group_agg_fn = whitespace_correction.get_aggregation_fn(group_aggregation)
 
         assert self.embedding_dim <= self.model_dim, "embedding_dim cannot be greater than the model_dim"
         self.embedding = nn.Embedding(num_embeddings=self.num_embeddings,

@@ -10,7 +10,7 @@ train:
   in_memory: false
   num_workers: 0
 
-  batch_max_tokens: ${BATCH_MAX_TOKENS}
+  batch_max_tokens: ${BATCH_MAX_TOKENS:65536}
   max_seq_length: ${MAX_SEQ_LENGTH:512}
 
   optimizer:
@@ -61,7 +61,7 @@ model:
     attention_heads: ${NUM_HEADS:8}
     dropout: 0.1
 
-    num_layers: ${NUM_LAYERS}
+    num_layers: ${NUM_LAYERS:6}
     share_parameters: false
     activation: "gelu"
 

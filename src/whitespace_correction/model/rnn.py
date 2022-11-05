@@ -30,8 +30,6 @@ class PytorchEncoder(BaseEncoder):
                                    model_dim=self.config.model_dim,
                                    pad_token_id=self.tokenizer.pad_token_id,
                                    norm_embeddings=self.config.norm_embeddings,
-                                   group_name=self.config.embedding_group_name,
-                                   group_aggregation=self.config.embedding_group_aggregation,
                                    dropout=self.config.dropout)
 
         assert self.config.type in {"lstm", "gru"}, \
@@ -139,7 +137,8 @@ class RNNEncoderModelWithHead(nn.Module, EncoderMixin, InferenceMixin):
             return_padding_mask=True
         )
 
-        input_lengths = self.get_input_lengths(input_ids, encoder_padding_mask)
-        return self.head.inference(encodings=encoder_outputs,
-                                   input_lengths=input_lengths,
-                                   **kwargs)
+        kwargs["input_lengths"] = self.get_input_lengths(input_ids, encoder_padding_mask)
+        return self.head.inference(
+            encodings=encoder_outputs,
+            **kwargs
+        )

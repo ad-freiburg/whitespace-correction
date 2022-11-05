@@ -51,9 +51,12 @@ best_val_loss: float = float("inf")
 logger = common.get_logger("TRAIN")
 
 
-def prepare_batch(batch: Dict[str, torch.Tensor],
-                  device: torch.device,
-                  model_type: str) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any], torch.Tensor]:
+def prepare_batch(
+        batch: Dict[str, torch.Tensor],
+        device: torch.device,
+        model_type: str
+) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any], torch.Tensor]:
+    print(model_type, list(batch.keys()))
     if model_type in {"transformer_encoder_with_head", "rnn_encoder_with_head"}:
         input_ids = batch.pop("input_ids").to(device, non_blocking=True)
         labels = batch.pop("labels").to(device, non_blocking=True)
