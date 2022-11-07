@@ -23,7 +23,7 @@ class PytorchEncoder(BaseEncoder):
         super().__init__(config=config, device=device)
         self.config: RNNEncoderDecoderConfig
 
-        self.tokenizer = toklib.load_tokenizer(self.config.tokenizer)
+        self.tokenizer = toklib.get_tokenizer_from_config(self.config.tokenizer)
 
         self.embedding = Embedding(num_embeddings=self.tokenizer.vocab_size,
                                    embedding_dim=self.config.embedding_dim,

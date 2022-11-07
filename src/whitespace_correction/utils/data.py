@@ -27,7 +27,7 @@ from torch.utils.data import (
 
 from whitespace_correction.model import tokenizer as toklib
 from whitespace_correction.utils import common, constants, nlp, whitespace_correction
-from whitespace_correction.utils.config import TrainConfig, ValConfig
+from whitespace_correction.utils.config import TrainConfig, ValConfig, TokenizerConfig
 
 Sample = Dict[str, Any]
 PreprocessingInputOutput = Union[Dict[str, Any], List[Dict[str, Any]]]
@@ -711,9 +711,12 @@ def _switch(functions: List[Dict] = None,
     return _preprocessing_fn
 
 
-def _character_masked_language_modeling(word_p: float = 0.15,
-                                        full_word_p: float = 0.5,
-                                        seed: int = 22) -> PreprocessingFn:
+def _character_masked_language_modeling(
+        tokenizer: Optional[Dict[str, Any]] = None,
+        word_p: float = 0.15,
+        full_word_p: float = 0.5,
+        seed: int = 22
+) -> PreprocessingFn:
     """
 
     Preprocessing method for masked language modeling.
@@ -723,7 +726,7 @@ def _character_masked_language_modeling(word_p: float = 0.15,
             (otherwise uniform(0, len(word) - 1) chars of the word will be masked)
     :param seed: random seed
     """
-    tok = toklib.load_tokenizer("char")
+    tok = toklib.get_tokenizer_from_config(TokenizerConfig.from_dict(tokenizer))
     unk_token_id = tok.token_to_id(constants.UNK)
     rand = random.Random(seed)
 
@@ -834,7 +837,7 @@ def _edit_operations(tokenizer: str = "") -> PreprocessingFn:
     :param tokenizer: tokenizer to use
     :return: corruption function with signature CORRUPTION_FN
     """
-    tok = toklib.load_tokenizer(tokenizer)
+    tok = toklib.get_tokenizer_from_config(tokenizer)
 
     import difflib
 

@@ -99,7 +99,7 @@ class PytorchEncoder(BaseEncoder):
                  custom_encoder_layer: nn.Module = None):
         super().__init__(config=config, device=device)
 
-        self.tokenizer = toklib.load_tokenizer(self.config.tokenizer)
+        self.tokenizer = toklib.get_tokenizer_from_config(self.config.tokenizer)
 
         self.embedding = Embedding(num_embeddings=self.tokenizer.vocab_size,
                                    embedding_dim=self.config.embedding_dim,
@@ -187,7 +187,7 @@ class PytorchDecoder(BaseDecoder):
         super().__init__(config=config, device=device)
         self.decoder_only = decoder_only
 
-        self.tokenizer = toklib.load_tokenizer(self.config.tokenizer)
+        self.tokenizer = toklib.get_tokenizer_from_config(self.config.tokenizer)
         self.padding_token_id = self.tokenizer.pad_token_id
 
         self.embedding = Embedding(num_embeddings=self.tokenizer.vocab_size,

@@ -117,7 +117,7 @@ class WhitespaceCorrector:
 
         if (
                 self.cfg.model.type == "transformer_encoder_with_head"
-                and self.cfg.model.encoder.tokenizer == "char"
+                and self.cfg.model.encoder.tokenizer.name == "char"
                 and self.cfg.model.head.type == "sequence_classification"
                 and self.cfg.model.head.arguments.get("num_classes", 0) == 3
         ):
@@ -128,6 +128,8 @@ class WhitespaceCorrector:
                 "thresholds_and_default": None,
                 "thresholds_and_default_no_spaces": None
             }
+            self.pfx = self.cfg.model.encoder.tokenizer.num_prefix_tokens
+            self.sfx = self.cfg.model.encoder.tokenizer.num_suffix_tokens
 
             # check if the corresponding inference pickle files are in the model dir, if so, load them
             temperature_path = os.path.join(model_dir, "temperature.pkl")
@@ -158,12 +160,15 @@ class WhitespaceCorrector:
                                   f"{thresholds_and_default_no_spaces}")
         elif (
                 self.cfg.model.type == "transformer"
-                and self.cfg.model.encoder.tokenizer == "char"
-                and self.cfg.model.decoder.tokenizer == "char"
+                and self.cfg.model.encoder.tokenizer.name == "char"
+                and self.cfg.model.decoder.tokenizer.name == "char"
         ):
-            self.char_tokenizer = tokenizer.load_tokenizer("char")
+            self.char_tokenizer = tokenizer.get_tokenizer_from_config(config.TokenizerConfig("char", 1, 1))
             self.unk_token_id = self.char_tokenizer.unk_token_id
             self.ws_token_id = self.char_tokenizer.token_to_id(" ")
+            self.pfx = 1
+            self.sfx = 1
+
             self.inference_kwargs = {
                 "score_fn": inference.char2char_score_fn(self.char_tokenizer)
             }
@@ -175,7 +180,7 @@ class WhitespaceCorrector:
 
         # use the training max sequence length here, even though some models work with arbitrary long sequences
         # (e.g. LSTM), for better accuracy
-        self.max_length = self.cfg.train.max_seq_length - self.model.encoder.tokenizer.num_added_tokens
+        self.max_length = self.cfg.train.max_seq_length - self.pfx - self.sfx
         self.window_size = math.ceil(0.75 * self.max_length)
         self.context_size = math.floor((self.max_length - self.window_size) / 2)
 
@@ -200,15 +205,15 @@ class WhitespaceCorrector:
             merged_logits = np.zeros((input_length, len(inference_results[0].logits[0])), dtype=float)
             for i, (ir, window) in enumerate(zip(inference_results, windows)):
                 start_idx = 0 if i == 0 else self.context_size
-                predictions = ir.predictions[1:-1][start_idx:start_idx + self.window_size]
-                logits = ir.logits[1:-1][start_idx:start_idx + self.window_size]
+                predictions = ir.predictions[self.pfx:-self.sfx][start_idx:start_idx + self.window_size]
+                logits = ir.logits[self.pfx:-self.sfx][start_idx:start_idx + self.window_size]
                 merged_predictions[window: window + self.window_size] = predictions
                 merged_logits[window: window + self.window_size] = logits
 
             assert np.all(merged_predictions >= 0)  # make sure everything was successful
             # add bos eos predictions and logits again (all zeros because they are not used anyway)
-            merged_predictions = list(np.pad(merged_predictions, (1, 1)))
-            merged_logits = list(np.pad(merged_logits, ((1, 1), (0, 0))))
+            merged_predictions = list(np.pad(merged_predictions, (self.pfx, self.sfx)))
+            merged_logits = list(np.pad(merged_logits, ((self.pfx, self.sfx), (0, 0))))
             return inference.SequenceClassificationInferenceResult(merged_predictions, merged_logits)
 
         else:
@@ -234,21 +239,21 @@ class WhitespaceCorrector:
                         and ir.token_ids[-1] == self.char_tokenizer.eos_token_id
                 )
                 from_idx, to_idx = match_token_ids_ignoring_space_and_unk(
-                    ir.token_ids[1:-1],
+                    ir.token_ids[self.pfx:-self.sfx],
                     self.char_tokenizer,
                     input_str_left_context,
                     input_str_window,
                     input_str_right_context
                 )
-                merged_token_ids.extend(ir.token_ids[1:-1][from_idx: to_idx])
-                merged_log_probabilities.extend(ir.token_log_probabilities[1:-1][from_idx: to_idx])
+                merged_token_ids.extend(ir.token_ids[self.pfx:-self.sfx][from_idx: to_idx])
+                merged_log_probabilities.extend(ir.token_log_probabilities[self.pfx:-self.sfx][from_idx: to_idx])
 
             merged_token_ids = (
                     [self.char_tokenizer.bos_token_id]
                     + merged_token_ids
                     + [self.char_tokenizer.eos_token_id]
             )
-            merged_log_probabilities = [0.] + merged_log_probabilities + [0.]
+            merged_log_probabilities = [0.] * self.pfx + merged_log_probabilities + [0.] * self.sfx
             return inference.SequenceGenerationInferenceResult(merged_token_ids, merged_log_probabilities)
 
     def _inference_result_to_str(
@@ -259,13 +264,13 @@ class WhitespaceCorrector:
         if isinstance(inference_result, inference.SequenceClassificationInferenceResult):
             return whitespace_correction.repair_whitespace(
                 input_str,
-                inference_result.predictions[1:-1]
+                inference_result.predictions[self.pfx:-self.sfx]
             )
         else:
             output_chars = []
             input_str_no_spaces = input_str.replace(" ", "")
             input_str_no_spaces_ptr = 0
-            for token_id in inference_result.token_ids[1:-1]:
+            for token_id in inference_result.token_ids[self.pfx:-self.sfx]:
                 if token_id == self.ws_token_id:
                     output_chars.append(" ")
                 else:

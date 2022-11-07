@@ -70,8 +70,8 @@ def process_files(
         preprocessing_fn: data.PreprocessingFn,
         max_sequence_length: int
 ) -> None:
-    tokenizer = toklib.load_tokenizer(tokenizer)
-    target_tokenizer = toklib.load_tokenizer(target_tokenizer)
+    tokenizer = toklib.get_tokenizer_from_config(tokenizer)
+    target_tokenizer = toklib.get_tokenizer_from_config(target_tokenizer)
     for filepath in files:
         samples = []
         with open(filepath, "r", encoding="utf8") as f:
@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
     common.add_file_log(logger, os.path.join(config.output_dir, "logs.txt"))
 
-    tokenizer = toklib.load_tokenizer(config.tokenizer)
+    tokenizer = toklib.get_tokenizer_from_config(config.tokenizer)
 
     if config.target_tokenizer is None:
         logger.info(f"no target tokenizer specified, reusing the tokenizer '{config.tokenizer}' "
@@ -261,7 +261,7 @@ if __name__ == "__main__":
         config.target_tokenizer = config.tokenizer
         target_tokenizer = tokenizer
     else:
-        target_tokenizer = toklib.load_tokenizer(config.target_tokenizer)
+        target_tokenizer = toklib.get_tokenizer_from_config(config.target_tokenizer)
 
     test_sentence = "This is a sentence to test the preprocessing functions before the data preprocessing starts."
     logger.info(f"testing tokenizer: {tokenizer.split(test_sentence)}\n"

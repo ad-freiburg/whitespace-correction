@@ -69,6 +69,25 @@ class BaseConfig:
         return yaml.dump(parsed_var, default_flow_style=False)
 
 
+class TokenizerConfig(BaseConfig):
+    required_arguments = "name"
+
+    def __init__(self, name: str, num_prefix_tokens: int, num_suffix_tokens: int) -> None:
+        self.name = name
+        self.num_prefix_tokens = num_prefix_tokens
+        self.num_suffix_tokens = num_suffix_tokens
+
+    @classmethod
+    def from_dict(cls, d: Dict[str, Any]) -> "TokenizerConfig":
+        cls._check_required(d)
+        config = TokenizerConfig(
+            name=d["name"],
+            num_prefix_tokens=d.get("num_prefix_tokens", 1),
+            num_suffix_tokens=d.get("num_suffix_tokens", 1)
+        )
+        return config
+
+
 class OptimizerConfig(BaseConfig):
     required_arguments = {"type", "learning_rate"}
 
@@ -86,7 +105,8 @@ class OptimizerConfig(BaseConfig):
         config = OptimizerConfig(
             type=d["type"],
             learning_rate=d["learning_rate"],
-            weight_decay=d.get("weight_decay", 0.0))
+            weight_decay=d.get("weight_decay", 0.0)
+        )
         return config
 
 
@@ -252,7 +272,7 @@ class TransformerEncoderDecoderConfig(BaseConfig):
     def __init__(self,
                  fixed: bool,
                  pretrained: str,
-                 tokenizer: str,
+                 tokenizer: TokenizerConfig,
                  max_num_embeddings: int,
                  embedding_dim: int,
                  positional_embeddings: Optional[str],
@@ -269,7 +289,7 @@ class TransformerEncoderDecoderConfig(BaseConfig):
                  activation: str):
         self.fixed: bool = fixed
         self.pretrained: str = pretrained
-        self.tokenizer: str = tokenizer
+        self.tokenizer = tokenizer
         self.max_num_embeddings: int = max_num_embeddings
         self.embedding_dim: int = embedding_dim
         self.positional_embeddings: Optional[str] = positional_embeddings
@@ -291,7 +311,7 @@ class TransformerEncoderDecoderConfig(BaseConfig):
         config = TransformerEncoderDecoderConfig(
             fixed=d.get("fixed", False),
             pretrained=d.get("pretrained", None),
-            tokenizer=d["tokenizer"],
+            tokenizer=TokenizerConfig.from_dict(d["tokenizer"]),
             max_num_embeddings=d.get("max_num_embeddings", 1024),
             embedding_dim=d.get("embedding_dim", 768),
             positional_embeddings=d.get("positional_embeddings"),
@@ -364,7 +384,7 @@ class RNNEncoderDecoderConfig(BaseConfig):
                  bidirectional: bool,
                  fixed: bool,
                  pretrained: str,
-                 tokenizer: str,
+                 tokenizer: TokenizerConfig,
                  embedding_dim: int,
                  group_name: Optional[str],
                  group_at: str,
@@ -377,7 +397,7 @@ class RNNEncoderDecoderConfig(BaseConfig):
         self.bidirectional: bool = bidirectional
         self.fixed: bool = fixed
         self.pretrained: str = pretrained
-        self.tokenizer: str = tokenizer
+        self.tokenizer = tokenizer
         self.embedding_dim: int = embedding_dim
         self.norm_embeddings: bool = norm_embeddings
         self.group_name: Optional[str] = group_name
@@ -395,7 +415,7 @@ class RNNEncoderDecoderConfig(BaseConfig):
             bidirectional=d.get("bidirectional", False),
             fixed=d.get("fixed", False),
             pretrained=d.get("pretrained", None),
-            tokenizer=d["tokenizer"],
+            tokenizer=TokenizerConfig.from_dict(d["tokenizer"]),
             embedding_dim=d.get("embedding_dim", 768),
             group_name=d.get("group_name"),
             group_aggregation=d.get("group_aggregation", "mean"),
@@ -525,8 +545,8 @@ class DataPreprocessingConfig(BaseConfig):
                  data: List[str],
                  seed: int,
                  output_dir: str,
-                 tokenizer: str,
-                 target_tokenizer: str,
+                 tokenizer: TokenizerConfig,
+                 target_tokenizer: Optional[TokenizerConfig],
                  preprocessing: List[PreprocessingConfig],
                  lmdb_name: str,
                  max_sequences: int,
@@ -534,8 +554,8 @@ class DataPreprocessingConfig(BaseConfig):
         self.data: List[str] = data
         self.seed: int = seed
         self.output_dir: str = output_dir
-        self.tokenizer: str = tokenizer
-        self.target_tokenizer: str = target_tokenizer
+        self.tokenizer = tokenizer
+        self.target_tokenizer = target_tokenizer
         self.preprocessing: List[PreprocessingConfig] = preprocessing
         self.lmdb_name: str = lmdb_name
         self.max_sequences: int = max_sequences
@@ -552,8 +572,8 @@ class DataPreprocessingConfig(BaseConfig):
             data=d["data"],
             seed=d.get("seed", None),
             output_dir=d["output_dir"],
-            tokenizer=d["tokenizer"],
-            target_tokenizer=d.get("target_tokenizer", None),
+            tokenizer=TokenizerConfig.from_dict(d["tokenizer"]),
+            target_tokenizer=TokenizerConfig.from_dict(d["target_tokenizer"]) if "target_tokenizer" in d else None,
             preprocessing=preprocessing_config,
             lmdb_name=d.get("lmdb_name", "lmdb"),
             max_sequences=d.get("max_sequences", None),

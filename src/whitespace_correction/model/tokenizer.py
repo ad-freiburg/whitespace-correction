@@ -1,10 +1,13 @@
 import functools
 import string
-from typing import Any, List, Tuple, Dict
+from typing import Any, List, Tuple, Dict, Union
 
 from whitespace_correction.utils import constants, whitespace_correction
+from whitespace_correction.utils.config import TokenizerConfig
 
 Tokenization = Tuple[List[int], Dict[str, Any]]
+AdditionalTokens = Tuple[str, ...]
+BatchAdditionalTokens = Union[AdditionalTokens, List[AdditionalTokens]]
 
 
 class Tokenizer:
@@ -51,27 +54,48 @@ class Tokenizer:
     def tokenize(
             self,
             sequence: str,
-            prefix_tokens: Tuple[str, ...] = (constants.BOS,),
-            suffix_tokens: Tuple[str, ...] = (constants.EOS,)
+            prefix_tokens: AdditionalTokens = (constants.BOS,),
+            suffix_tokens: AdditionalTokens = (constants.EOS,)
     ) -> Tokenization:
         return self.tokenize_batch([sequence], prefix_tokens, suffix_tokens)[0]
+
+    def _check_prefix_suffix_tokens(
+            self,
+            sequences: List[str],
+            prefix_tokens: BatchAdditionalTokens = (constants.BOS,),
+            suffix_tokens: BatchAdditionalTokens = (constants.EOS,)
+    ) -> Tuple[BatchAdditionalTokens, BatchAdditionalTokens]:
+        if isinstance(prefix_tokens, tuple):
+            prefix_tokens = [prefix_tokens] * len(sequences)
+        if isinstance(suffix_tokens, tuple):
+            suffix_tokens = [suffix_tokens] * len(sequences)
+        assert (
+            len(prefix_tokens) == len(sequences)
+            and all(len(tokens) == self.num_prefix_tokens for tokens in prefix_tokens),
+            f"expected {self.num_prefix_tokens} prefix tokens for all sequences, "
+            f"but got {prefix_tokens}"
+        )
+        assert (
+            len(suffix_tokens) == len(sequences)
+            and all(len(tokens) == self.num_suffix_tokens for tokens in suffix_tokens),
+            f"expected {self.num_suffix_tokens} suffix tokens for all sequences, "
+            f"but got {suffix_tokens}"
+        )
+        return prefix_tokens, suffix_tokens
 
     def tokenize_batch(
             self,
             sequences: List[str],
-            prefix_tokens: Tuple[str, ...] = (constants.BOS,),
-            suffix_tokens: Tuple[str, ...] = (constants.EOS,)
+            prefix_tokens: BatchAdditionalTokens = (constants.BOS,),
+            suffix_tokens: BatchAdditionalTokens = (constants.EOS,)
     ) -> List[Tokenization]:
-        assert len(prefix_tokens) == self.num_prefix_tokens, \
-            f"expected {self.num_prefix_tokens} prefix tokens, but got {len(prefix_tokens)}: {prefix_tokens}"
-        assert len(suffix_tokens) == self.num_suffix_tokens, \
-            f"expected {self.num_suffix_tokens} suffix tokens, but got {len(suffix_tokens)}: {suffix_tokens}"
+        prefix_tokens, suffix_tokens = self._check_prefix_suffix_tokens(sequences, prefix_tokens, suffix_tokens)
         tokenizations = []
-        for split in self.split_batch(sequences):
-            token_ids = list(self.token_to_id(token) for token in prefix_tokens)
+        for prefix, suffix, split in zip(prefix_tokens, suffix_tokens, self.split_batch(sequences)):
+            token_ids = list(self.token_to_id(token) for token in prefix)
             for token in split:
                 token_ids.append(self.token_to_id(token))
-            token_ids.extend(self.token_to_id(token) for token in suffix_tokens)
+            token_ids.extend(self.token_to_id(token) for token in suffix)
             tokenizations.append((token_ids, {}))
         return tokenizations
 
@@ -103,40 +127,39 @@ class ByteTokenizer(Tokenizer):
     def split_batch(self, sequences: List[str]) -> List[List[str]]:
         return [list(chr(b) for b in sequence.encode("utf8")) for sequence in sequences]
 
-    @staticmethod
     def _split_batch_extended(
-            sequences: List[str],
-            prefix_tokens: Tuple[str, ...] = (constants.BOS,),
-            suffix_tokens: Tuple[str, ...] = (constants.EOS,)
+            self,
+            sequences: List[str]
     ) -> List[Tuple[List[str], List[int]]]:
         batch = []
         for sequence in sequences:
             splits = []
-            char_groups = [1] * len(prefix_tokens)
+            char_groups = [1] * self.num_prefix_tokens
             for char in sequence:
                 char_bytes = char.encode("utf8")
                 splits.extend(chr(b) for b in char_bytes)
                 char_groups.append(len(char_bytes))
-            char_groups.extend([1] * len(suffix_tokens))
+            char_groups.extend([1] * self.num_suffix_tokens)
             batch.append((splits, char_groups))
         return batch
 
     def tokenize_batch(
             self,
             sequences: List[str],
-            prefix_tokens: Tuple[str, ...] = (constants.BOS,),
-            suffix_tokens: Tuple[str, ...] = (constants.EOS,)
+            prefix_tokens: BatchAdditionalTokens = (constants.BOS,),
+            suffix_tokens: BatchAdditionalTokens = (constants.EOS,)
     ) -> List[Tokenization]:
-        assert len(prefix_tokens) == self.num_prefix_tokens, \
-            f"expected {self.num_prefix_tokens} prefix tokens, but got {len(prefix_tokens)}: {prefix_tokens}"
-        assert len(suffix_tokens) == self.num_suffix_tokens, \
-            f"expected {self.num_suffix_tokens} suffix tokens, but got {len(suffix_tokens)}: {suffix_tokens}"
+        prefix_tokens, suffix_tokens = self._check_prefix_suffix_tokens(sequences, prefix_tokens, suffix_tokens)
         tokenizations = []
-        for split, char_groups in self._split_batch_extended(sequences, prefix_tokens, suffix_tokens):
-            token_ids = list(self.token_to_id(token) for token in prefix_tokens)
+        for prefix, suffix, (split, char_groups) in zip(
+                prefix_tokens,
+                suffix_tokens,
+                self._split_batch_extended(sequences)
+        ):
+            token_ids = list(self.token_to_id(token) for token in prefix)
             for token in split:
                 token_ids.append(self.token_to_id(token))
-            token_ids.extend(self.token_to_id(token) for token in suffix_tokens)
+            token_ids.extend(self.token_to_id(token) for token in suffix)
             tokenizations.append((token_ids, {"char_groups": char_groups}))
         return tokenizations
 
@@ -178,10 +201,10 @@ class CharacterTokenizer(Tokenizer):
         return sequences
 
 
-def load_tokenizer(name: str) -> Tokenizer:
-    if name == "char":
-        return CharacterTokenizer()
-    elif name == "byte":
-        return ByteTokenizer()
+def get_tokenizer_from_config(config: TokenizerConfig) -> Tokenizer:
+    if config.name == "char":
+        return CharacterTokenizer(config.num_prefix_tokens, config.num_suffix_tokens)
+    elif config.name == "byte":
+        return ByteTokenizer(config.num_prefix_tokens, config.num_suffix_tokens)
     else:
-        raise ValueError(f"unknown tokenizer {name}")
+        raise ValueError(f"unknown tokenizer {config.name}")
