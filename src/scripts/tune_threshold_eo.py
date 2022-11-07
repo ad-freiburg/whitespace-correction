@@ -58,7 +58,6 @@ def evaluate_thresholds(
 
 def tune(args: argparse.Namespace) -> None:
     logger = common.get_logger("EO_THRESHOLD_TUNING")
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     device = torch.device(args.device)
 

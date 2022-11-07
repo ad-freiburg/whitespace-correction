@@ -13,7 +13,7 @@ import msgpack
 
 from whitespace_correction.model import tokenizer as toklib
 from whitespace_correction.utils import common, data, io
-from whitespace_correction.utils.config import DataPreprocessingConfig
+from whitespace_correction.utils.config import DataPreprocessingConfig, TokenizerConfig
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
@@ -65,8 +65,8 @@ def process_line(
 def process_files(
         queue: mp.Queue,
         files: List[str],
-        tokenizer: str,
-        target_tokenizer: str,
+        tokenizer: TokenizerConfig,
+        target_tokenizer: TokenizerConfig,
         preprocessing_fn: data.PreprocessingFn,
         max_sequence_length: int
 ) -> None:
@@ -97,14 +97,16 @@ def process_files(
     queue.put(None)
 
 
-def write_lmdb(output_dir: str,
-               lmdb_name: str,
-               files: List[str],
-               tokenizer: str,
-               target_tokenizer: str,
-               preprocessing_fn: data.PreprocessingFn,
-               max_sequence_length: int,
-               max_sequences: int) -> None:
+def write_lmdb(
+        output_dir: str,
+        lmdb_name: str,
+        files: List[str],
+        tokenizer: TokenizerConfig,
+        target_tokenizer: TokenizerConfig,
+        preprocessing_fn: data.PreprocessingFn,
+        max_sequence_length: int,
+        max_sequences: int
+) -> None:
     env = lmdb.open(os.path.join(output_dir, lmdb_name),
                     subdir=False,
                     map_size=int(10e11),  # approx. 100 GB
@@ -113,11 +115,6 @@ def write_lmdb(output_dir: str,
                     map_async=True,
                     lock=False)
     start = time.monotonic()
-    # overwrite / drop existing database
-    db_handle = env.open_db()
-    with env.begin(write=True) as txn:
-        txn.drop(db_handle)
-
     # give each process a subset of the files
     queue: mp.Queue = mp.Queue()
     processes = []
@@ -231,9 +228,6 @@ def write_lmdb(output_dir: str,
 if __name__ == "__main__":
     args = parse_args()
 
-    # disable parallelism for tokenizers explicitly
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
     config = DataPreprocessingConfig.from_yaml(args.config)
     assert isinstance(config, DataPreprocessingConfig)
 
@@ -271,13 +265,13 @@ if __name__ == "__main__":
         preprocessing_fn = None
     else:
         test_item = {"sequence": test_sentence, "target_sequence": test_sentence}
-        corruption_fns = []
+        preprocessing_fns = []
         for cfg in config.preprocessing:
             preprocessing_fn = data.get_preprocessing_fn(cfg.type, **cfg.arguments)
             logger.info(f"testing '{cfg.type}' preprocessing function: {test_item} \u2192 "
                         f"{preprocessing_fn(test_item.copy())}")
-            corruption_fns.append(preprocessing_fn)
-        preprocessing_fn = data.chain_preprocessing_fns(corruption_fns)
+            preprocessing_fns.append(preprocessing_fn)
+        preprocessing_fn = data.chain_preprocessing_fns(preprocessing_fns)
         logger.info(f"testing chained preprocessing function: {test_item} \u2192 {preprocessing_fn(test_item.copy())}")
 
     files = [

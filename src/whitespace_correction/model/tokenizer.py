@@ -69,18 +69,15 @@ class Tokenizer:
             prefix_tokens = [prefix_tokens] * len(sequences)
         if isinstance(suffix_tokens, tuple):
             suffix_tokens = [suffix_tokens] * len(sequences)
-        assert (
-            len(prefix_tokens) == len(sequences)
-            and all(len(tokens) == self.num_prefix_tokens for tokens in prefix_tokens),
-            f"expected {self.num_prefix_tokens} prefix tokens for all sequences, "
+        assert len(prefix_tokens) == len(sequences) \
+               and all(len(tokens) == self.num_prefix_tokens for tokens in prefix_tokens), \
+            f"expected {self.num_prefix_tokens} prefix tokens for all sequences, " \
             f"but got {prefix_tokens}"
-        )
-        assert (
-            len(suffix_tokens) == len(sequences)
-            and all(len(tokens) == self.num_suffix_tokens for tokens in suffix_tokens),
-            f"expected {self.num_suffix_tokens} suffix tokens for all sequences, "
+        assert len(suffix_tokens) == len(sequences) \
+               and all(len(tokens) == self.num_suffix_tokens for tokens in suffix_tokens), \
+            f"expected {self.num_suffix_tokens} suffix tokens for all sequences, " \
             f"but got {suffix_tokens}"
-        )
+
         return prefix_tokens, suffix_tokens
 
     def tokenize_batch(

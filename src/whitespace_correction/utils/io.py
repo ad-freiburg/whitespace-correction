@@ -15,15 +15,17 @@ from whitespace_correction.utils.lr_schedule import LR_SCHEDULER_TYPE
 logger = common.get_logger("IO")
 
 
-def save_checkpoint(checkpoint_path: str,
-                    model: nn.Module,
-                    optimizer: optim.Optimizer,
-                    step: int,
-                    epoch: int,
-                    epoch_step: int,
-                    val_loss: float,
-                    lr_scheduler: Optional[LR_SCHEDULER_TYPE] = None,
-                    grad_scaler: Optional[amp.GradScaler] = None) -> None:
+def save_checkpoint(
+        checkpoint_path: str,
+        model: nn.Module,
+        optimizer: optim.Optimizer,
+        step: int,
+        epoch: int,
+        epoch_step: int,
+        val_loss: float,
+        lr_scheduler: Optional[LR_SCHEDULER_TYPE] = None,
+        grad_scaler: Optional[amp.GradScaler] = None
+) -> None:
     """
 
     Saves a checkpoint to a directory.
@@ -37,13 +39,8 @@ def save_checkpoint(checkpoint_path: str,
     :param lr_scheduler: Pytorch learning rate scheduler
     :param grad_scaler: Pytorch grad scaler for mixed precision training
     """
-
-    if isinstance(model, DistributedDataParallel):
-        state_dict = model.module.state_dict()
-    else:
-        state_dict = model.state_dict()
     state = {
-        "model_state_dict": state_dict,
+        "model_state_dict": model.state_dict(),
         "optimizer_state_dict": optimizer.state_dict(),
         "lr_scheduler_state_dict": None if lr_scheduler is None else lr_scheduler.state_dict(),
         "grad_scaler_state_dict": None if grad_scaler is None else grad_scaler.state_dict(),

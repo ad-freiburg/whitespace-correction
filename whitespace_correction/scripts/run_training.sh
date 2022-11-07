@@ -8,20 +8,46 @@
 #SBATCH --mail-type=END,FAIL
 #SBATCH --time=24:00:00
 
-export WORKSPACE_DIR=/work/dlclarge1/swalter-tokenization_repair/tokenization_repair
+master_port=${MASTER_PORT:-33334}
 
-export EXPERIMENT_DIR=$WORKSPACE_DIR/experiments
-export TOKENIZER_DIR=$WORKSPACE_DIR/tokenizers
+force_local=${FORCE_LOCAL:-false}
+if [[ -n $SLURM_JOB_ID && $force_local == false ]] ; then
+  script_dir=$(scontrol show job $SLURM_JOBID | awk -F= '/Command=/{print $2}')
+  is_local=false
+else
+  script_dir=$(realpath $0)
+  is_local=true
+fi
+script_dir=$(dirname $script_dir)
+workspace=$(realpath $script_dir/../..)
+cd $workspace
+echo "Script is located at $script_dir, workspace is $workspace"
+
+if [[ $is_local == true ]]; then
+  echo "Running locally"
+  master_addr="127.0.0.1"
+  world_size=$(python -c "import torch; print(torch.cuda.device_count())")
+else
+  export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+
+  export NCCL_SOCKET_IFNAME=eth0
+  export NCCL_IB_DISABLE=1
+
+  master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
+  world_size=${WORLD_SIZE?"env variable WORLD_SIZE not found"}
+  echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
+fi
 
 rsync -ah --progress $LMDB_PATH $TMPDIR/lmdb
 export LMDB_PATH=$TMPDIR/lmdb
+export EXPERIMENT_DIR=${EXPERIMENT_DIR:-$workspace/experiments}
 
-echo "work dir: $WORKSPACE_DIR"
-echo "experiment dir: $EXPERIMENT_DIR"
 echo "lmdb path: $LMDB_PATH"
 
-random_port=$(python -c "import random; print(random.randrange(10000, 60000))")
-export TORCH_DIST_PORT=$random_port
+# for pytorch distributed
+export MASTER_ADDR=$master_addr
+export MASTER_PORT=$master_port
+export WORLD_SIZE=$world_size
 
 config=${CONFIG:-""}
 resume=${RESUME:-""}
@@ -31,13 +57,21 @@ if [[ ($config == "" && $resume == "") || ($config != "" && $resume != "") ]]; t
   exit 1
 fi
 
-echo "GPU information:"
-nvidia-smi
-
 if [[ $config != "" ]]; then
   echo "Starting training with config $config"
-  python -W ignore -m trt.train --config $config
+  train_cmd="-W ignore -m wsc.train --config $config"
 else
   echo "Resuming training from experiment $resume"
-  python -W ignore -m trt.train --resume $resume --overwrite-train-data $LMDB_PATH
+  train_cmd="-W ignore -m wsc.train --resume $resume --overwrite-train-data $LMDB_PATH"
+fi
+
+if [[ $is_local == true ]]; then
+  echo "Starting local training with cmd $train_cmd"
+  torchrun \
+    --nnodes=1 \
+    --nproc_per_node=$world_size \
+    $train_cmd
+else
+  echo "Starting Slurm training with cmd $train_cmd"
+  srun python $train_cmd
 fi

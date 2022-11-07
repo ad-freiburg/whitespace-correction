@@ -28,6 +28,7 @@ from torch.utils.data import (
 from whitespace_correction.model import tokenizer as toklib
 from whitespace_correction.utils import common, constants, nlp, whitespace_correction
 from whitespace_correction.utils.config import TrainConfig, ValConfig, TokenizerConfig
+from whitespace_correction.utils.distributed import DistributedInfo
 
 Sample = Dict[str, Any]
 PreprocessingInputOutput = Union[Dict[str, Any], List[Dict[str, Any]]]
@@ -78,26 +79,30 @@ class SequenceDatasetMixin(DatasetMixin):
 
 
 def _open_lmdb(lmdb_path: str) -> lmdb.Environment:
-    env = lmdb.open(lmdb_path,
-                    map_size=10e11,  # approx. 100 GB
-                    subdir=False,
-                    max_readers=1,
-                    readonly=True,
-                    lock=False,
-                    readahead=False,
-                    meminit=False)
+    env = lmdb.open(
+        lmdb_path,
+        map_size=int(10e11),  # approx. 100 GB
+        subdir=False,
+        max_readers=1,
+        readonly=True,
+        lock=False,
+        readahead=False,
+        meminit=False
+    )
     return env
 
 
 class PretokenizedDataset(Dataset, SequenceDatasetMixin):
-    def __init__(self,
-                 lmdb_path: str,
-                 input_pad_token_id: int,
-                 target_pad_token_id: int,
-                 min_seq_length: int,
-                 max_seq_length: int,
-                 in_memory: bool = False,
-                 transform_fn: Optional[TransformFn] = None):
+    def __init__(
+            self,
+            lmdb_path: str,
+            input_pad_token_id: int,
+            target_pad_token_id: int,
+            min_seq_length: int,
+            max_seq_length: int,
+            in_memory: bool = False,
+            transform_fn: Optional[TransformFn] = None
+    ):
         global logger
         self.lmdb_path = lmdb_path
         self.input_pad_token_id = input_pad_token_id
@@ -219,7 +224,8 @@ class MaxSeqLenDataset(Dataset, SequenceDatasetMixin):
         self.rand = torch.Generator()
         self.rand.manual_seed(dist.get_rank() if dist.is_initialized() else 22)
         pad_values = {"input_ids": 0,
-                      "target_input_ids": 0}
+                      "target_input_ids": 0,
+                      "labels": -1}
         super().__init__(pad_values=pad_values)
 
     def __getitem__(self, idx: int) -> Dict[str, torch.Tensor]:
@@ -272,7 +278,6 @@ class BucketSampler(Sampler):
 
     def _build_batches(self) -> List[List[int]]:
         self.rand.seed(self.seed + self.epoch)
-        logger.info("[BUCKETSAMPLER] Building buckets and batches...")
 
         if isinstance(self.data_source, PretokenizedDataset):
             indices_lengths = list(zip(list(range(len(self.data_source))), self.data_source.get_lengths()))
@@ -394,6 +399,7 @@ class DistributedDynamicSampler(DistributedSampler):
 def get_data_from_config(
         train_config: TrainConfig,
         val_config: ValConfig,
+        info: DistributedInfo,
         seed: int,
         input_pad_token_id: int,
         target_pad_token_id: int
@@ -452,7 +458,7 @@ def get_data_from_config(
         assert train_config.batch_size is None, "cannot specify batch_max_tokens and batch_size together"
         train_sampler = BucketSampler(
             data_source=train_dataset,
-            max_tokens=train_config.batch_max_tokens,
+            max_tokens=train_config.batch_max_tokens // info.world_size,
             min_seq_len=train_config.min_seq_length,
             max_seq_len=train_config.max_seq_length,
             bucket_span=4,
@@ -461,7 +467,7 @@ def get_data_from_config(
         )
         val_sampler = BucketSampler(
             data_source=val_dataset,
-            max_tokens=train_config.batch_max_tokens,
+            max_tokens=train_config.batch_max_tokens // info.world_size,
             min_seq_len=train_config.min_seq_length,
             max_seq_len=train_config.max_seq_length,
             bucket_span=4,
@@ -475,12 +481,12 @@ def get_data_from_config(
         train_generator = train_generator.manual_seed(seed)
         train_sampler = BatchSampler(
             sampler=RandomSampler(train_dataset, generator=train_generator),
-            batch_size=train_config.batch_size,
+            batch_size=max(train_config.batch_size // info.world_size, 1),
             drop_last=True
         )
         val_sampler = BatchSampler(
             sampler=SequentialSampler(val_dataset),
-            batch_size=train_config.batch_size,
+            batch_size=max(train_config.batch_size // info.world_size, 1),
             drop_last=False
         )
 

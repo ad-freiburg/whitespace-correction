@@ -19,9 +19,7 @@ from whitespace_correction.api.utils import (
     sliding_windows
 )
 from whitespace_correction.model import tokenizer, get_model_from_config
-from whitespace_correction.utils import common, config, constants, inference, io, whitespace_correction
-
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+from whitespace_correction.utils import common, config, inference, io, whitespace_correction
 
 __all__ = ["ModelInfo", "get_available_models", "WhitespaceCorrector"]
 

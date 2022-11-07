@@ -1,4 +1,4 @@
-experiment: "${MODEL_NAME}_lstm_whitespace_correction_char"
+experiment: "${MODEL_NAME}_whitespace_correction_char"
 experiment_dir: ${EXPERIMENT_DIR}
 
 seed: 22
@@ -10,7 +10,7 @@ train:
   in_memory: false
   num_workers: 0
 
-  batch_max_tokens: ${BATCH_MAX_TOKENS}
+  batch_max_tokens: ${BATCH_MAX_TOKENS:65536}
   max_seq_length: ${MAX_SEQ_LENGTH:512}
 
   optimizer:

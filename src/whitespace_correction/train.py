@@ -1,6 +1,7 @@
 import argparse
 import os
 import re
+import shutil
 import sys
 import time
 from contextlib import redirect_stdout
@@ -27,10 +28,9 @@ from whitespace_correction.model import Model, get_model_from_config, get_tokeni
 from whitespace_correction.utils import common, config, data, io, loss, lr_schedule, metrics
 from whitespace_correction.utils.lr_schedule import LR_SCHEDULER_TYPE
 from whitespace_correction.utils.optimizer import get_optimizer_from_config
+from whitespace_correction.utils.distributed import DistributedInfo, unwrap_ddp
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-# disable parallelism for tokenizers explicitly
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def parse_args() -> argparse.Namespace:
@@ -90,7 +90,7 @@ def train_one_epoch(
         optimizer: optim.Optimizer,
         criterion: nn.Module,
         summary_writer: SummaryWriter,
-        device: torch.device,
+        info: DistributedInfo,
         checkpoint_dir: str,
         lr_scheduler: Optional[LR_SCHEDULER_TYPE],
         mixed_prec_scaler: amp.GradScaler,
@@ -107,21 +107,19 @@ def train_one_epoch(
     global logger
     global epoch
 
-    rank = dist.get_rank()
-
     if isinstance(eval_interval, float):
         eval_interval = common.constrain(int(eval_interval * len(train_loader)), 1, len(train_loader))
     if isinstance(log_interval, float):
         log_interval = common.constrain(int(log_interval * len(train_loader)), 1, len(train_loader))
 
     model = model.train()
-    model = model.to(device)
-    criterion = criterion.to(device)
+    model = model.to(info.device)
+    criterion = criterion.to(info.device)
 
     begin_of_epoch = time.perf_counter()
     start = time.perf_counter()
 
-    if rank == 0:
+    if info.is_main_process:
         mean_loss = metrics.AverageMetric(name="loss")
         additional_losses = {}
 
@@ -132,7 +130,7 @@ def train_one_epoch(
         batch_padded_seq_lengths = []
 
     train_loader_length = len(train_loader)
-    logger.info(f"[rank:{rank}] [epoch:{epoch + 1}] train_loader_length: {train_loader_length}")
+    logger.info(f"[rank:{info.rank}] [epoch:{epoch + 1}] train_loader_length: {train_loader_length}")
 
     for batch_num, batch in enumerate(train_loader):
         step += 1
@@ -140,7 +138,7 @@ def train_one_epoch(
 
         inputs, kwargs, labels = prepare_batch(
             batch=batch,
-            device=device,
+            device=info.device,
             model_type=model_type
         )
 
@@ -157,7 +155,7 @@ def train_one_epoch(
         mixed_prec_scaler.step(optimizer)
         mixed_prec_scaler.update()
 
-        if rank == 0:
+        if info.is_main_process:
             mean_loss.add(loss.detach())
             for loss_name, loss_value in loss_dict.items():
                 if loss_name not in additional_losses:
@@ -172,45 +170,37 @@ def train_one_epoch(
         if lr_scheduler is not None:
             lr_scheduler.step()
 
-        if epoch_step % eval_interval == 0 and rank == 0:
-            val_loss = evaluate(model_type=model_type,
-                                model=model,
-                                encoder_tokenizer=encoder_tokenizer,
-                                decoder_tokenizer=decoder_tokenizer,
-                                val_loader=val_loader,
-                                criterion=criterion,
-                                text_metrics=text_metrics,
-                                summary_writer=summary_writer,
-                                device=device)
-            io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-{step}.pt"),
-                               model=model,
-                               optimizer=optimizer,
-                               lr_scheduler=lr_scheduler,
-                               grad_scaler=mixed_prec_scaler,
-                               step=step,
-                               epoch=epoch,
-                               epoch_step=epoch_step,
-                               val_loss=val_loss)
-            io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-last.pt"),
-                               model=model,
-                               optimizer=optimizer,
-                               lr_scheduler=lr_scheduler,
-                               grad_scaler=mixed_prec_scaler,
-                               step=step,
-                               epoch=epoch,
-                               epoch_step=epoch_step,
-                               val_loss=val_loss)
+        if epoch_step % eval_interval == 0 and info.is_main_process:
+            val_loss = evaluate(
+                model_type=model_type,
+                model=model,
+                encoder_tokenizer=encoder_tokenizer,
+                decoder_tokenizer=decoder_tokenizer,
+                val_loader=val_loader,
+                criterion=criterion,
+                text_metrics=text_metrics,
+                summary_writer=summary_writer,
+                device=info.device
+            )
+            ckpt_path = os.path.join(checkpoint_dir, f"{model_name}-checkpoint-{step}.pt")
+            io.save_checkpoint(
+                checkpoint_path=ckpt_path,
+                model=unwrap_ddp(model),
+                optimizer=optimizer,
+                lr_scheduler=lr_scheduler,
+                grad_scaler=mixed_prec_scaler,
+                step=step,
+                epoch=epoch,
+                epoch_step=epoch_step,
+                val_loss=val_loss
+            )
+            last_ckpt_path = os.path.join(checkpoint_dir, f"{model_name}-checkpoint-last.pt")
+            shutil.copy2(ckpt_path, last_ckpt_path)
+
             if val_loss < best_val_loss:
                 best_val_loss = val_loss
-                io.save_checkpoint(checkpoint_path=os.path.join(checkpoint_dir, f"{model_name}-checkpoint-best.pt"),
-                                   model=model,
-                                   optimizer=optimizer,
-                                   lr_scheduler=lr_scheduler,
-                                   grad_scaler=mixed_prec_scaler,
-                                   step=step,
-                                   epoch=epoch,
-                                   epoch_step=epoch_step,
-                                   val_loss=val_loss)
+                best_ckpt_path = os.path.join(checkpoint_dir, f"{model_name}-checkpoint-best.pt")
+                shutil.copy2(ckpt_path, best_ckpt_path)
 
             if keep_last_n_checkpoints > 0:
                 # first get all checkpoints
@@ -220,7 +210,7 @@ def train_one_epoch(
 
             model = model.train()
 
-        if epoch_step % log_interval == 0 and rank == 0:
+        if epoch_step % log_interval == 0 and info.is_main_process:
             with StringIO() as buf, redirect_stdout(buf):
                 GPUtil.showUtilization(all=True)
                 util = buf.getvalue().strip()
@@ -370,23 +360,29 @@ def evaluate(
     return val_loss
 
 
-def train(rank: int,
-          cfg: config.Config,
-          directories: Dict[str, str],
-          resuming: bool) -> None:
+def train(
+        info: DistributedInfo,
+        cfg: config.Config,
+        directories: Dict[str, str],
+        resuming: bool
+) -> None:
     global logger
     global epoch
     global step
     global steps_to_fast_forward
     global best_val_loss
 
-    log_file = os.path.join(directories["experiment"], "logs.txt")
-    common.add_file_log(logger, log_file)
-    common.add_file_log(data.logger, log_file)
+    if info.is_main_process:
+        log_file = os.path.join(directories["experiment"], "logs.txt")
+        common.add_file_log(logger, log_file)
+        common.add_file_log(data.logger, log_file)
 
-    device_props = torch.cuda.get_device_properties(rank)
-    logger.info(f"[GPU:{rank}] {device_props.name}, {device_props.total_memory // 1024 // 1024:.0f}MiB "
-                f"({device_props.major}.{device_props.minor}, {device_props.multi_processor_count})")
+    device_props = torch.cuda.get_device_properties(info.device)
+    logger.info(
+        f"[GPU:{info.rank}:{info.local_rank}] {device_props.name}, "
+        f"{device_props.total_memory // 1024 // 1024:.0f}MiB "
+        f"({device_props.major}.{device_props.minor}, {device_props.multi_processor_count})"
+    )
 
     if cfg.seed:
         torch.manual_seed(cfg.seed)
@@ -395,10 +391,7 @@ def train(rank: int,
     torch.backends.cudnn.benchmark = True
     torch.use_deterministic_algorithms(False)
 
-    device = torch.device(f"cuda:{rank}")
-    torch.cuda.set_device(rank)
-
-    model = get_model_from_config(config=cfg.model, device=device)
+    model = get_model_from_config(config=cfg.model, device=info.device)
     encoder_tokenizer, decoder_tokenizer = get_tokenizers_from_model(model=model)
 
     input_pad_token_id = encoder_tokenizer.pad_token_id
@@ -418,19 +411,22 @@ def train(rank: int,
     )
 
     num_training_steps = len(train_loader) * cfg.train.num_epochs
-    optimizer = get_optimizer_from_config(config=cfg.train.optimizer,
-                                          model=model)
+    optimizer = get_optimizer_from_config(
+        config=cfg.train.optimizer,
+        model=model
+    )
 
-    lr_scheduler = lr_schedule.get_lr_scheduler_from_config(config=cfg.train.lr_scheduler,
-                                                            num_training_steps=num_training_steps,
-                                                            optimizer=optimizer) \
-        if cfg.train.lr_scheduler is not None else None
+    lr_scheduler = lr_schedule.get_lr_scheduler_from_config(
+        config=cfg.train.lr_scheduler,
+        num_training_steps=num_training_steps,
+        optimizer=optimizer
+    ) if cfg.train.lr_scheduler is not None else None
 
     mixed_prec_scaler = amp.GradScaler(enabled=cfg.train.mixed_precision)
 
     summary_writer = SummaryWriter(log_dir=directories["tensorboard"])
 
-    if rank == 0:
+    if info.is_main_process:
         logger.info(f"Using model:\n{model}")
         logger.info(f"Model parameters: {common.get_num_parameters(model)}")
 
@@ -458,14 +454,14 @@ def train(rank: int,
         best_val_loss = checkpoint["val_loss"]
         steps_to_fast_forward = checkpoint["epoch_step"]
 
-        if rank == 0:
+        if info.is_main_process:
             logger.info(
                 f"Resuming training from checkpoint {last_checkpoint}\n"
                 f"Starting at epoch {epoch + 1} at global step {step} with a best validation loss of {best_val_loss}\n"
                 f"Need to fast forward {steps_to_fast_forward} steps"
             )
 
-    ddp_model = DDP(model, device_ids=[rank], output_device=rank)
+    ddp_model = DDP(model)
 
     while epoch < cfg.train.num_epochs:
         train_loader.batch_sampler.set_epoch(epoch)
@@ -480,7 +476,7 @@ def train(rank: int,
             optimizer=optimizer,
             criterion=criterion,
             summary_writer=summary_writer,
-            device=device,
+            info=info,
             checkpoint_dir=directories["checkpoints"],
             lr_scheduler=lr_scheduler,
             mixed_prec_scaler=mixed_prec_scaler,
@@ -496,32 +492,67 @@ def train(rank: int,
         steps_to_fast_forward = 0
 
 
-def setup_distributed(rank: int, world_size: int) -> None:
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = os.environ.get("TORCH_DIST_PORT", "12345")
+def initialize() -> DistributedInfo:
+    assert torch.cuda.device_count() > 0, "need at least one GPU for training, but found none"
+    assert dist.is_available(), "distributed package must be available for training"
+    assert dist.is_nccl_available(), "nccl backend for distributed training must be available"
+    logger = common.get_logger("TRAIN_INITIALIZATION")
+    logger.info(f"Found {torch.cuda.device_count()} GPUs "
+                f"(CUDA_VISIBLE_DEVICES={os.environ.get('CUDA_VISIBLE_DEVICES')})")
 
-    # initialize the process group
+    assert (
+            "MASTER_ADDR" in os.environ
+            and "MASTER_PORT" in os.environ
+            and "WORLD_SIZE" in os.environ
+    ), f"could not find at least one of MASTER_ADDR, MASTER_PORT and WORLD_SIZE env variables"
+    master_addr = os.environ["MASTER_ADDR"]
+    master_port = int(os.environ["MASTER_PORT"])
+    world_size = int(os.environ["WORLD_SIZE"])
+
+    if "SLURM_PROCID" in os.environ and os.environ.get("FORCE_LOCAL", "false") != "true":
+        rank = int(os.environ["SLURM_PROCID"])
+        local_rank = int(rank % torch.cuda.device_count())
+        local_world_size = torch.cuda.device_count()
+        logger.info(
+            f"Running on Slurm Cluster: master_addr={master_addr}, master_port={master_port}, "
+            f"rank={rank}, local_rank={local_rank}, world_size={world_size}, local_world_size={local_world_size}"
+        )
+    else:
+        assert (
+                "RANK" in os.environ
+                and "LOCAL_RANK" in os.environ
+        ), "could not find RANK and LOCAL_RANK env variables, you probably did not use torchrun to run this script"
+        rank = int(os.environ["RANK"])
+        local_rank = int(os.environ["LOCAL_RANK"])
+        local_world_size = int(os.environ["LOCAL_WORLD_SIZE"])
+        logger.info(
+            f"Running using torchrun: master_addr={master_addr}, master_port={master_port}, "
+            f"rank={rank}, local_rank={local_rank}, world_size={world_size}, local_world_size={local_world_size}"
+        )
+
     dist.init_process_group(
-        "nccl",
+        backend=dist.Backend.NCCL,
+        init_method="env://",
         rank=rank,
         world_size=world_size
     )
 
+    assert dist.is_initialized(), "failed to initialize process group"
 
-def cleanup_distributed() -> None:
+    return DistributedInfo(
+        rank=rank,
+        local_rank=local_rank,
+        world_size=world_size,
+        local_world_size=local_world_size
+    )
+
+
+def de_initialize() -> None:
     dist.destroy_process_group()
 
 
-def train_distributed(rank: int,
-                      world_size: int,
-                      cfg: config.Config,
-                      directories: Dict[str, str],
-                      resuming: bool) -> None:
-    setup_distributed(rank, world_size)
-
-    train(rank, cfg, directories, resuming)
-
-    cleanup_distributed()
+def cleanup_distributed() -> None:
+    dist.destroy_process_group()
 
 
 def setup_experiment_dir(cfg: config.Config) -> str:
@@ -532,26 +563,16 @@ def setup_experiment_dir(cfg: config.Config) -> str:
     return experiment_dir
 
 
-def check_gpus() -> int:
-    world_size = torch.cuda.device_count()
-
-    if not torch.cuda.is_available():
-        logger.error("No available GPU detected. Exiting.")
-        sys.exit(1)
-
-    if world_size > 1:
-        logger.info(f"Found {world_size} devices. Running distributed training.")
-
-    return world_size
-
-
-def main(args: argparse.Namespace) -> None:
+def main(args: argparse.Namespace, info: DistributedInfo) -> None:
     if args.config is not None:
         cfg = config.Config.from_yaml(args.config)
-        experiment_dir = setup_experiment_dir(cfg)
-        # save copy of config file to experiment directory
-        with open(os.path.join(experiment_dir, "config.yaml"), "w", encoding="utf8") as f:
-            f.write(str(cfg))
+        if info.is_main_process:
+            experiment_dir = setup_experiment_dir(cfg)
+            # save copy of config file to experiment directory
+            with open(os.path.join(experiment_dir, "config.yaml"), "w", encoding="utf8") as f:
+                f.write(str(cfg))
+        else:
+            experiment_dir = None
         resuming = False
     else:
         experiment_dir = args.resume
@@ -569,19 +590,15 @@ def main(args: argparse.Namespace) -> None:
         "checkpoints": os.path.join(experiment_dir, "checkpoints"),
         "tensorboard": os.path.join(experiment_dir, "tensorboard")
     }
-    os.makedirs(directories["checkpoints"], exist_ok=True)
-    os.makedirs(directories["tensorboard"], exist_ok=True)
-
-    # check gpu environment
-    world_size = check_gpus()
+    if info.is_main_process:
+        os.makedirs(directories["checkpoints"], exist_ok=True)
+        os.makedirs(directories["tensorboard"], exist_ok=True)
 
     # start distributed training
-    mp.spawn(train_distributed,
-             args=(world_size, cfg, directories, resuming),
-             nprocs=world_size,
-             join=True)
+    train(info, cfg, directories, resuming)
 
 
 if __name__ == "__main__":
     mp.set_start_method("spawn")
-    main(parse_args())
+    main(parse_args(), initialize())
+    de_initialize()
