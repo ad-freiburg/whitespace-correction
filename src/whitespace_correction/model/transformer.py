@@ -246,7 +246,8 @@ class PytorchDecoder(BaseDecoder):
                 memory: Optional[torch.Tensor] = None,
                 tgt_mask: Optional[torch.Tensor] = None,
                 memory_mask: Optional[torch.Tensor] = None,
-                memory_key_padding_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+                memory_key_padding_mask: Optional[torch.Tensor] = None,
+                **kwargs: Any) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         assert (tgt_mask is None or tgt_mask.dim() == 2), \
             f"tgt_mask has to be of shape [T, T], but got {tgt_mask.shape}"
         assert (memory_mask is None or memory_mask.dim() == 2), \
@@ -261,18 +262,18 @@ class PytorchDecoder(BaseDecoder):
         # we need to pass different kwargs to the underlying decoder module when we use a decoder only decoder
         # because we implement it as an encoder under the hood
         if self.decoder_only:
-            kwargs = {
+            kwargs.update({
                 "mask": tgt_mask,
                 "src_key_padding_mask": tgt_key_padding_mask
-            }
+            })
         else:
-            kwargs = {
+            kwargs.update({
                 "memory": memory,
                 "tgt_mask": tgt_mask,
                 "memory_mask": memory_mask,
                 "tgt_key_padding_mask": tgt_key_padding_mask,
                 "memory_key_padding_mask": memory_key_padding_mask
-            }
+            })
 
         emb = self.embedding(tgt)
         # reuse the same layer multiple times when parameters are shared
@@ -354,8 +355,9 @@ class TransformerModel(nn.Module, EncoderMixin, DecoderMixin, InferenceMixin):
 
     def encode(self,
                src: torch.Tensor,
-               src_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        outputs = self.encoder(src=src, src_mask=src_mask)
+               src_mask: Optional[torch.Tensor] = None,
+               **kwargs: Any) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        outputs = self.encoder(src=src, src_mask=src_mask, **kwargs)
         return outputs
 
     def decode(self,
@@ -363,11 +365,14 @@ class TransformerModel(nn.Module, EncoderMixin, DecoderMixin, InferenceMixin):
                memory: Optional[torch.Tensor] = None,
                tgt_mask: Optional[torch.Tensor] = None,
                memory_mask: Optional[torch.Tensor] = None,
-               memory_key_padding_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+               memory_key_padding_mask: Optional[torch.Tensor] = None,
+               **kwargs: Any) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         memory = self.cross_proj(memory)
 
-        outputs = self.decoder(tgt=tgt, memory=memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
-                               memory_key_padding_mask=memory_key_padding_mask)
+        outputs = self.decoder(
+            tgt=tgt, memory=memory, tgt_mask=tgt_mask, memory_mask=memory_mask,
+            memory_key_padding_mask=memory_key_padding_mask, **kwargs
+        )
         return outputs
 
     def forward(self,
@@ -375,16 +380,20 @@ class TransformerModel(nn.Module, EncoderMixin, DecoderMixin, InferenceMixin):
                 tgt: torch.Tensor,
                 src_mask: Optional[torch.Tensor] = None,
                 tgt_mask: Optional[torch.Tensor] = None,
-                memory_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        memory, enc_loss_dict = self.encode(src=src, src_mask=src_mask)
+                memory_mask: Optional[torch.Tensor] = None,
+                **kwargs: Any) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        memory, enc_loss_dict = self.encode(src=src, src_mask=src_mask, **kwargs)
 
         memory_key_padding_mask = self.get_encoder_padding_mask(src)
 
-        output, dec_loss_dict = self.decode(tgt=tgt,
-                                            memory=memory,
-                                            tgt_mask=tgt_mask,
-                                            memory_mask=memory_mask,
-                                            memory_key_padding_mask=memory_key_padding_mask)
+        output, dec_loss_dict = self.decode(
+            tgt=tgt,
+            memory=memory,
+            tgt_mask=tgt_mask,
+            memory_mask=memory_mask,
+            memory_key_padding_mask=memory_key_padding_mask,
+            **kwargs
+        )
         enc_loss_dict.update(dec_loss_dict)
 
         return output, enc_loss_dict
@@ -438,14 +447,14 @@ class TransformerEncoderModelWithHead(nn.Module, EncoderMixin, InferenceMixin):
 
     def encode(self,
                src: torch.Tensor,
-               src_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        return self.encoder(src=src, src_mask=src_mask)
+               **kwargs: Any) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        return self.encoder(src=src, **kwargs)
 
     def forward(self,
                 input_ids: torch.Tensor,
-                src_mask: torch.Tensor = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        encodings, enc_loss_dict = self.encode(input_ids, src_mask)
-        return self.head(encodings), enc_loss_dict
+                **kwargs: Any) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        encodings, enc_loss_dict = self.encode(input_ids, **kwargs)
+        return self.head(encodings, **kwargs), enc_loss_dict
 
     def inference(
             self,
@@ -466,7 +475,7 @@ class TransformerEncoderModelWithHead(nn.Module, EncoderMixin, InferenceMixin):
             return_padding_mask=True
         )
 
-        kwargs["input_lengths"] = self.get_input_lengths(input_ids, encoder_padding_mask)
+        kwargs["input_lengths"] = torch.sum(torch.logical_not(encoder_padding_mask), dim=1)
         return self.head.inference(
             encodings=encoder_outputs,
             **kwargs

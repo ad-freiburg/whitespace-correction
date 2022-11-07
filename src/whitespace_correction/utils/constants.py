@@ -18,6 +18,6 @@ DE = "[de]"
 ES = "[es]"
 FR = "[fr]"
 IT = "[it]"
-PR = "[pr]"
+PT = "[pt]"
 
-LANGUAGE_TOKENS = [UNK_LANG, EN, DE, ES, FR, IT, PR]
+LANGUAGE_TOKENS = [UNK_LANG, EN, DE, ES, FR, IT, PT]

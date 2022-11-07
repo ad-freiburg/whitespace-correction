@@ -182,6 +182,15 @@ def random_byte_substring(
 ) -> Tuple[int, int]:
     if s == "":
         return 0, 0
-    num_bytes = list(itertools.accumulate(len(c.encode("utf8")) for c in s))
+    num_bytes = list(len(c.encode("utf8")) for c in s)
     possible_subsequences = _find_subsequences_with_sum_close_to_but_max_k(num_bytes, max_bytes)
     return rand.choice(possible_subsequences)
+
+
+def find_substring_ignoring_spaces(s: str, substring: str) -> Tuple[int, int]:
+    substring_pattern = re.compile(r"\s?".join(
+        re.escape(char) for char in substring if char != " "
+    ))
+    match = substring_pattern.search(s)
+    assert match is not None, f"could not find substring \"{substring}\" in \"{s}\""
+    return match.start(), match.end()

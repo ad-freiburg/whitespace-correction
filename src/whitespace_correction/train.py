@@ -24,7 +24,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
 from whitespace_correction.model import Model, get_model_from_config, get_tokenizers_from_model, tokenizer as toklib
-from whitespace_correction.utils import common, config, constants, data, io, loss, lr_schedule, metrics
+from whitespace_correction.utils import common, config, data, io, loss, lr_schedule, metrics
 from whitespace_correction.utils.lr_schedule import LR_SCHEDULER_TYPE
 from whitespace_correction.utils.optimizer import get_optimizer_from_config
 
@@ -56,7 +56,6 @@ def prepare_batch(
         device: torch.device,
         model_type: str
 ) -> Tuple[Tuple[torch.Tensor, ...], Dict[str, Any], torch.Tensor]:
-    print(model_type, list(batch.keys()))
     if model_type in {"transformer_encoder_with_head", "rnn_encoder_with_head"}:
         input_ids = batch.pop("input_ids").to(device, non_blocking=True)
         labels = batch.pop("labels").to(device, non_blocking=True)
@@ -111,9 +110,9 @@ def train_one_epoch(
     rank = dist.get_rank()
 
     if isinstance(eval_interval, float):
-        eval_interval = common.constrain(int(eval_interval * len(train_loader)), 0, len(train_loader))
+        eval_interval = common.constrain(int(eval_interval * len(train_loader)), 1, len(train_loader))
     if isinstance(log_interval, float):
-        log_interval = common.constrain(int(log_interval * len(train_loader)), 0, len(train_loader))
+        log_interval = common.constrain(int(log_interval * len(train_loader)), 1, len(train_loader))
 
     model = model.train()
     model = model.to(device)
@@ -250,15 +249,19 @@ def train_one_epoch(
             logger.info(f"[{step}, {epoch_step}] train_mean_fwd: {train_mean_fwd:.8f}")
 
             n_bins = 30
-            summary_writer.add_histogram("train_bsz_hist",
-                                         np.array(batch_sizes),
-                                         step,
-                                         bins=n_bins)
+            summary_writer.add_histogram(
+                "train_bsz_hist",
+                np.array(batch_sizes),
+                step,
+                bins=n_bins
+            )
 
-            summary_writer.add_histogram("train_batch_padded_seq_len_hist",
-                                         np.array(batch_padded_seq_lengths),
-                                         step,
-                                         bins=n_bins)
+            summary_writer.add_histogram(
+                "train_batch_padded_seq_len_hist",
+                np.array(batch_padded_seq_lengths),
+                step,
+                bins=n_bins
+            )
 
             end = time.perf_counter()
             logger.info(f"[{step}, {epoch_step}] [train_time:{step - log_interval}\u2192{step}] "
@@ -300,7 +303,7 @@ def evaluate(
     rand_batch_idx = torch.randint(low=0, high=len(val_loader), size=(1,)).item()
 
     tm: List[metrics.TextMetric] = [
-        metrics.get_text_metric(metric_conf.name, **metric_conf.arguments)
+        metrics.get_text_metric(metric_conf.name, encoder_tokenizer, decoder_tokenizer)
         for metric_conf in text_metrics
     ]
     start = time.perf_counter()
@@ -327,24 +330,26 @@ def evaluate(
             # and one random batch (to see also other examples, see below)
             if batch_num == 0:
                 for metric in tm:
-                    metric.add(inputs=inputs,
-                               outputs=output,
-                               labels=labels,
-                               encoder_tokenizer=encoder_tokenizer,
-                               decoder_tokenizer=decoder_tokenizer)
+                    metric.add(
+                        inputs=inputs,
+                        outputs=output,
+                        labels=labels
+                    )
                     text = metric.calc()
-                    summary_writer.add_text(f"val_{metric.name()}",
-                                            text,
-                                            step)
+                    summary_writer.add_text(
+                        f"val_{metric.name()}",
+                        text,
+                        step
+                    )
                     logger.info(f"[{step}] val_{metric.name()}: {text}")
 
             if batch_num == rand_batch_idx:
                 for metric in tm:
-                    metric.add(inputs=inputs,
-                               outputs=output,
-                               labels=labels,
-                               encoder_tokenizer=encoder_tokenizer,
-                               decoder_tokenizer=decoder_tokenizer)
+                    metric.add(
+                        inputs=inputs,
+                        outputs=output,
+                        labels=labels
+                    )
                     text = metric.calc()
                     summary_writer.add_text(f"val_{metric.name()}_rand",
                                             text,

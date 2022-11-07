@@ -6,7 +6,7 @@ from typing import Tuple
 
 from tqdm import tqdm
 
-from whitespace_correction.utils import io, whitespace_correction
+from whitespace_correction.utils import whitespace_correction
 
 
 def txt_file_to_jsonl(in_and_out_file: Tuple[str, str]) -> None:

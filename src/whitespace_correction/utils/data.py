@@ -595,7 +595,7 @@ def _whitespace_subsampling(
     rand = random.Random(seed)
 
     def _preprocessing_fn(seq: PreprocessingInputOutput) -> PreprocessingInputOutput:
-        def _sub(item: Dict[str, str]) -> Dict[str, str]:
+        def _sub(item: Dict[str, Any]) -> Dict[str, Any]:
             assert "sequence" in item and ("labels" in item or "target_sequence" in item)
 
             item["sequence"] = whitespace_correction.clean_sequence(item["sequence"])
@@ -607,10 +607,12 @@ def _whitespace_subsampling(
 
             item["sequence"] = item["sequence"][start:end]
             if "labels" in item:
-                item["labels"] = item["labels"][start + 1: end + 1]
+                item["labels"] = [0] + item["labels"][start + 1: end + 1] + [0]
             else:
                 target_sequence = whitespace_correction.clean_sequence(item["target_sequence"])
-                target_start, target_end = ...
+                target_start, target_end = whitespace_correction.find_substring_ignoring_spaces(
+                    target_sequence, item["sequence"]
+                )
                 item["target_sequence"] = target_sequence[target_start: target_end]
                 assert item["sequence"].replace(" ", "") == item["target_sequence"].replace(" ", "")
 

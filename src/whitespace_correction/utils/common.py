@@ -31,9 +31,10 @@ def get_logger(name: str) -> logging.Logger:
     """
 
     logger = logging.getLogger(name)
+    logger.propagate = False
     stderr_handler = logging.StreamHandler()
     stderr_handler.setFormatter(_LOG_FORMATTER)
-    if not logger.handlers:
+    if not logger.hasHandlers():
         logger.addHandler(stderr_handler)
     logger.setLevel(logging.INFO)
 

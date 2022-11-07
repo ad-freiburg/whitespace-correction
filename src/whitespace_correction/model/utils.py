@@ -1,3 +1,5 @@
+import functools
+import itertools
 from typing import Callable, List, Tuple
 
 import einops
@@ -15,9 +17,9 @@ def get_aggregation_fn(aggregation: str) -> Callable[[torch.Tensor], torch.Tenso
     :return: the function
     """
     if aggregation == "mean":
-        return torch.mean
+        return functools.partial(torch.mean, dim=0)
     elif aggregation == "sum":
-        return torch.sum
+        return functools.partial(torch.sum, dim=0)
     else:
         raise ValueError(f"aggregation must be mean or sum, but got {aggregation}")
 
@@ -36,11 +38,34 @@ def group_features(
     :param agg_fn: aggregation function, e.g. torch.mean
     :return: grouped features (padded with zeros to largest number of groups) and group lengths
     """
-    assert feats.dim == 3, "feats must have a shape of [S, B, H]"
-    agg_feats = []
-    for feat, group in zip(einops.rearrange(feats, "s b h -> b s h"), groups):
-        agg_feat = []
-        for grouped_feats in torch.split(feat[:sum(group)], group):
-            agg_feat.append(agg_fn(grouped_feats))
-        agg_feats.append(torch.stack(agg_feat))
-    return rnn.pad_sequence(agg_feats), [len(group) for group in groups]
+    assert feats.ndim == 3, f"feats must have a shape of [S, B, H], but got {feats.shape}"
+    s, b, h = feats.shape
+    group_lengths = [len(group) for group in groups]
+    max_group_length = max(group_lengths)
+    agg_feats = torch.zeros(max_group_length, b, h, dtype=feats.dtype, device=feats.device)
+    for i, group in enumerate(groups):
+        if len(group) == 0:
+            continue
+        elif len(group) == 1:
+            agg_feats[0, i] = agg_fn(feats[:group[0], i])
+        start = 0
+        end = 1
+        while end < len(group):
+            if group[start] == group[end]:
+                end += 1
+                # only continue if we are not at the last group yet
+                if end < len(group):
+                    continue
+            cum_start = sum(group[:start])
+            total_group_length = sum(group[start:end])
+            agg_feats[start:end, i] = agg_fn(
+                einops.rearrange(
+                    feats[cum_start:cum_start + total_group_length, i],
+                    "(s g) h -> g s h",
+                    s=total_group_length // group[start],
+                    g=group[start]
+                )
+            )
+            start = end
+
+    return agg_feats, group_lengths

@@ -210,27 +210,26 @@ class Metric(ABC):
 
 
 class TextMetric(Metric, ABC):
-    def __init__(self, with_special_tokens: bool = False):
+    def __init__(self,
+                 encoder_tokenizer: Optional[Tokenizer] = None,
+                 decoder_tokenizer: Optional[Tokenizer] = None):
         super().__init__()
         self.inputs: Optional[Tuple[torch.Tensor, ...]] = None
         self.outputs = None
         self.labels = None
-        self.encoder_tokenizer = None
-        self.decoder_tokenizer = None
-        self.with_special_tokens = with_special_tokens
+        self.encoder_tokenizer: Optional[Tokenizer] = encoder_tokenizer
+        self.decoder_tokenizer: Optional[Tokenizer] = decoder_tokenizer
 
-    def add(self,
+    def add(
+            self,
             inputs: Tuple[torch.Tensor, ...],
             outputs: torch.Tensor,
             labels: torch.Tensor,
-            encoder_tokenizer: Tokenizer,
-            decoder_tokenizer: Tokenizer = None,
-            **kwargs: Any) -> None:
+            **kwargs: Any
+    ) -> None:
         self.inputs = inputs
         self.outputs = outputs
         self.labels = labels
-        self.encoder_tokenizer = encoder_tokenizer
-        self.decoder_tokenizer = decoder_tokenizer
 
     def calc(self) -> str:
         raise NotImplementedError()
@@ -239,8 +238,6 @@ class TextMetric(Metric, ABC):
         self.inputs = None
         self.outputs = None
         self.labels = None
-        self.encoder_tokenizer = None
-        self.decoder_tokenizer = None
 
 
 class AverageMetric(Metric):
@@ -285,20 +282,22 @@ class Perplexity(Metric):
         return "perplexity"
 
 
-def get_text_metric(name: str, **kwargs: Any) -> TextMetric:
-    if name == QualitativeBatchEvaluation().name():
-        return QualitativeBatchEvaluation(**kwargs)
-    elif name == QualitativeBatchEvaluationWhitespaceCorrection().name():
-        return QualitativeBatchEvaluationWhitespaceCorrection(**kwargs)
-    elif name == QualitativeBatchEvaluationClassification().name():
-        return QualitativeBatchEvaluationClassification(**kwargs)
-    elif name == QualitativeBatchEvaluationSequenceClassification().name():
-        return QualitativeBatchEvaluationSequenceClassification(**kwargs)
+def get_text_metric(
+        name: str,
+        encoder_tokenizer: Optional[Tokenizer],
+        decoder_tokenizer: Optional[Tokenizer]
+) -> TextMetric:
+    if name == "sequence_generation":
+        return SequenceGenerationTextMetric(encoder_tokenizer, decoder_tokenizer)
+    elif name == "classification":
+        return ClassificationTextMetric(encoder_tokenizer)
+    elif name == "sequence_classification":
+        return SequenceClassificationTextMetric(encoder_tokenizer)
     else:
         raise ValueError(f"Unknown text metric {name}")
 
 
-class QualitativeBatchEvaluation(TextMetric):
+class SequenceGenerationTextMetric(TextMetric):
     def calc(self) -> str:
         assert self.inputs is not None and self.outputs is not None and self.labels is not None
         assert len(self.inputs) in {1, 2}
@@ -307,20 +306,18 @@ class QualitativeBatchEvaluation(TextMetric):
         else:
             input_ids, target_ids = self.inputs
 
-        input_str = self.encoder_tokenizer.decode_batch(input_ids.T.tolist(),
-                                                        skip_special_tokens=not self.with_special_tokens)
+        input_str = self.encoder_tokenizer.de_tokenize_batch(
+            input_ids.T.tolist()
+        )
 
         pred_ids = torch.argmax(self.outputs, dim=2).T.tolist()
-        pred_str = self.decoder_tokenizer.decode_batch(pred_ids,
-                                                       skip_special_tokens=not self.with_special_tokens)
+        pred_str = self.decoder_tokenizer.de_tokenize_batch(pred_ids)
 
         if target_ids is not None:
-            target_str = self.decoder_tokenizer.decode_batch(target_ids.T.tolist(),
-                                                             skip_special_tokens=not self.with_special_tokens)
+            target_str = self.decoder_tokenizer.de_tokenize_batch(target_ids.T.tolist())
 
         else:
-            target_str = self.decoder_tokenizer.decode_batch(self.labels.tolist(),
-                                                             skip_special_tokens=not self.with_special_tokens)
+            target_str = self.decoder_tokenizer.de_tokenize_batch(self.labels.tolist())
 
         B = len(input_str)
 
@@ -334,70 +331,16 @@ class QualitativeBatchEvaluation(TextMetric):
         return s
 
     def name(self) -> str:
-        return "qualitative_batch_evaluation"
+        return "sequence_generation"
 
 
-class QualitativeBatchEvaluationWhitespaceCorrection(QualitativeBatchEvaluation):
-
-    def calc(self) -> str:
-        assert self.inputs is not None and self.outputs is not None and self.labels is not None
-        assert len(self.inputs) in {1, 2}
-        if len(self.inputs) == 1:
-            input_ids, target_ids = self.inputs[0], None
-        else:
-            input_ids, target_ids = self.inputs
-
-        hashtag_token_id = self.encoder_tokenizer.token_to_id("#")
-        unk_token_id = self.encoder_tokenizer.unk_token_id
-        # replace unk tokens with single char hashtags, because <unk> would not line up with
-        # the one label per character rule of tokenization repair
-        input_ids[input_ids == unk_token_id] = hashtag_token_id
-
-        input_str = self.encoder_tokenizer.decode_batch(input_ids.T.tolist())
-
-        if target_ids is not None:
-            target_str = self.decoder_tokenizer.decode_batch(target_ids.T.tolist())
-            repaired_target_str = [whitespace_correction.repair_whitespace(in_s, t_s)
-                                   for in_s, t_s in zip(input_str, target_str)]
-
-            pred_ids = torch.argmax(self.outputs, dim=2).T.tolist()
-            pred_str = self.decoder_tokenizer.decode_batch(pred_ids)
-            repaired_pred_str = [whitespace_correction.repair_whitespace(in_s, p_s)
-                                 for in_s, p_s in zip(input_str, pred_str)]
-
-        else:
-            target_str = self.labels[:, 1:-1].tolist()
-            repaired_target_str = [whitespace_correction.repair_whitespace(in_s, t_s)
-                                   for in_s, t_s in zip(input_str, target_str)]
-
-            pred_ids = torch.argmax(self.outputs, dim=2).T[:, 1:-1].tolist()
-            pred_str = pred_ids
-            repaired_pred_str = [whitespace_correction.repair_whitespace(in_s, p_s)
-                                 for in_s, p_s in zip(input_str, pred_str)]
-
-        B = len(input_str)
-
-        s = ""
-        for i in range(B):
-            s += f"\n\nInput: {input_str[i]}" \
-                 f"\n\nPredicted: {repaired_pred_str[i]}\n(Repair tokens: {pred_str[i]})" \
-                 f"\n\n(Target: {repaired_target_str[i]})\n(Target repair tokens: {target_str[i]})\n\n"
-            if (i + 1) < B:
-                s += "-" * 80
-        return s
-
-    def name(self) -> str:
-        return "qualitative_batch_evaluation_whitespace_correction"
-
-
-class QualitativeBatchEvaluationClassification(TextMetric):
+class ClassificationTextMetric(TextMetric):
     def calc(self) -> str:
         assert self.inputs is not None and self.outputs is not None and self.labels is not None
         input_ids = self.inputs[0]
         B, _ = self.outputs.shape
         predicted_class = torch.argmax(self.outputs, dim=1).T.tolist()
-        input_str = self.encoder_tokenizer.decode_batch(input_ids.T.tolist(),
-                                                        skip_special_tokens=not self.with_special_tokens)
+        input_str = self.encoder_tokenizer.de_tokenize_batch(input_ids.T.tolist())
         labels = self.labels.tolist()
 
         s = ""
@@ -410,17 +353,16 @@ class QualitativeBatchEvaluationClassification(TextMetric):
         return s
 
     def name(self) -> str:
-        return "qualitative_batch_evaluation_classification"
+        return "classification"
 
 
-class QualitativeBatchEvaluationSequenceClassification(TextMetric):
+class SequenceClassificationTextMetric(TextMetric):
     def calc(self) -> str:
         assert self.inputs is not None and self.outputs is not None and self.labels is not None
         input_ids = self.inputs[0]
         S, B, _ = self.outputs.shape
         predicted_classes = torch.argmax(self.outputs, dim=2).T.tolist()
-        input_str = self.encoder_tokenizer.decode_batch(input_ids.T.tolist(),
-                                                        skip_special_tokens=not self.with_special_tokens)
+        input_str = self.encoder_tokenizer.de_tokenize_batch(input_ids.T.tolist())
         labels = self.labels.tolist()
 
         s = ""
@@ -433,4 +375,4 @@ class QualitativeBatchEvaluationSequenceClassification(TextMetric):
         return s
 
     def name(self) -> str:
-        return "qualitative_batch_evaluation_sequence_classification"
+        return "sequence_classification"

@@ -36,7 +36,7 @@ val:
   val_data: 5000
 
   text_metrics:
-    - name: "qualitative_batch_evaluation"
+    - name: "sequence_generation"
 
 model:
   name: "${MODEL_NAME}"

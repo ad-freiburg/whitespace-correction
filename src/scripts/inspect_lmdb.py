@@ -21,7 +21,7 @@ if __name__ == "__main__":
     logger = common.get_logger("LMDB_INSPECTION")
 
     env = lmdb.open(args.lmdb,
-                    map_size=10e11,  # approx. 100 GB
+                    map_size=int(10e11),  # approx. 100 GB
                     subdir=False,
                     max_readers=1,
                     readonly=True,
@@ -34,7 +34,7 @@ if __name__ == "__main__":
         files = msgpack.loads(txn.get(b"__files__"))
 
         logger.info(f"LMDB stores {length} samples from {len(files)} files")
-        logger.info(f"Files (first 50): \n{pprint.pformat(files[:50])}")
+        logger.info(f"Files (first 20): \n{pprint.pformat(files[:20])}")
 
         all_lengths = []
 
@@ -46,5 +46,5 @@ if __name__ == "__main__":
         all_lengths_sorted = sorted(all_lengths)
         num_tokens = sum(all_lengths_sorted)
         logger.info(f"Number of tokens in LMDB is {num_tokens:,}")
-        logger.info(f"Average sample length is {num_tokens / len(all_lengths_sorted): .6f}")
+        logger.info(f"Average sample length is {num_tokens / len(all_lengths_sorted): .2f}")
         logger.info(f"Median sample length is {all_lengths_sorted[len(all_lengths_sorted) // 2]}")

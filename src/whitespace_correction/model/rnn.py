@@ -111,14 +111,14 @@ class RNNEncoderModelWithHead(nn.Module, EncoderMixin, InferenceMixin):
 
     def encode(self,
                src: torch.Tensor,
-               src_mask: Optional[torch.Tensor] = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        return self.encoder(src=src, src_lengths=src_mask)
+               **kwargs: Any) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        return self.encoder(src=src, **kwargs)
 
     def forward(self,
                 input_ids: torch.Tensor,
-                src_mask: torch.Tensor = None) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        encodings, enc_loss_dict = self.encode(input_ids, src_mask)
-        return self.head(encodings), enc_loss_dict
+                **kwargs: Any) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        encodings, enc_loss_dict = self.encode(input_ids, **kwargs)
+        return self.head(encodings, **kwargs), enc_loss_dict
 
     def inference(self,
                   sequences: Union[str, List[str]],
@@ -137,7 +137,7 @@ class RNNEncoderModelWithHead(nn.Module, EncoderMixin, InferenceMixin):
             return_padding_mask=True
         )
 
-        kwargs["input_lengths"] = self.get_input_lengths(input_ids, encoder_padding_mask)
+        kwargs["input_lengths"] = torch.sum(torch.logical_not(encoder_padding_mask), dim=1)
         return self.head.inference(
             encodings=encoder_outputs,
             **kwargs

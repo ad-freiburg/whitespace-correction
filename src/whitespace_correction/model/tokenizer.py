@@ -1,3 +1,4 @@
+import functools
 import string
 from typing import Any, List, Tuple, Dict
 
@@ -13,6 +14,9 @@ class Tokenizer:
         self.reverse_vocab = {
             v: k for k, v in self.vocab.items()
         }
+        self.special_token_ids = {
+            self.vocab[token] for token in constants.EXTENDED_SPECIAL_TOKENS if token in self.vocab
+        }
         self.eos_token_id = self.vocab[constants.EOS]
         self.bos_token_id = self.vocab[constants.BOS]
         self.unk_token_id = self.vocab[constants.UNK]
@@ -20,6 +24,9 @@ class Tokenizer:
 
         self.num_prefix_tokens = num_prefix_tokens
         self.num_suffix_tokens = num_suffix_tokens
+
+    def _check_token_id(self, t: int, with_special_tokens: bool) -> bool:
+        return with_special_tokens or t not in self.special_token_ids
 
     @property
     def vocab_size(self) -> int:
@@ -68,10 +75,10 @@ class Tokenizer:
             tokenizations.append((token_ids, {}))
         return tokenizations
 
-    def de_tokenize(self, token_ids: List[int]) -> str:
-        return self.de_tokenize_batch([token_ids])[0]
+    def de_tokenize(self, token_ids: List[int], with_special_tokens: bool = True) -> str:
+        return self.de_tokenize_batch([token_ids], with_special_tokens)[0]
 
-    def de_tokenize_batch(self, token_ids: List[List[int]]) -> List[str]:
+    def de_tokenize_batch(self, token_ids: List[List[int]], with_special_tokens: bool = True) -> List[str]:
         raise NotImplementedError
 
     def id_to_token(self, token_id: int) -> str:
@@ -88,6 +95,10 @@ class ByteTokenizer(Tokenizer):
             **{st: 256 + i for i, st in enumerate(constants.SPECIAL_TOKENS)}
         }
         super().__init__(num_prefix_tokens, num_suffix_tokens)
+
+        self.special_token_bytes = {
+            self.token_to_id(token): list(token.encode("utf8")) for token in constants.SPECIAL_TOKENS
+        }
 
     def split_batch(self, sequences: List[str]) -> List[List[str]]:
         return [list(chr(b) for b in sequence.encode("utf8")) for sequence in sequences]
@@ -129,10 +140,17 @@ class ByteTokenizer(Tokenizer):
             tokenizations.append((token_ids, {"char_groups": char_groups}))
         return tokenizations
 
-    def de_tokenize_batch(self, token_ids: List[List[int]]) -> List[str]:
+    def de_tokenize_batch(self, token_ids: List[List[int]], with_special_tokens: bool = True) -> List[str]:
         sequences = []
         for ids in token_ids:
-            sequences.append(bytes(ids).decode("utf8"))
+            token_bytes = []
+            for token_id in ids:
+                is_special_token = token_id in self.special_token_ids
+                if with_special_tokens and is_special_token:
+                    token_bytes.extend(self.special_token_bytes[token_id])
+                elif not is_special_token:
+                    token_bytes.append(token_id)
+            sequences.append(bytes(token_bytes).decode("utf8"))
         return sequences
 
 
@@ -150,10 +168,13 @@ class CharacterTokenizer(Tokenizer):
     def split_batch(self, sequences: List[str]) -> List[List[str]]:
         return [list(sequence) for sequence in sequences]
 
-    def de_tokenize_batch(self, token_ids: List[List[int]]) -> List[str]:
+    def de_tokenize_batch(self, token_ids: List[List[int]], with_special_tokens: bool = True) -> List[str]:
         sequences = []
+        filter_fn = functools.partial(self._check_token_id, with_special_tokens=with_special_tokens)
         for ids in token_ids:
-            sequences.append("".join(self.id_to_token(token_id) for token_id in ids))
+            sequences.append(
+                "".join(self.id_to_token(token_id) for token_id in filter(filter_fn, ids))
+            )
         return sequences
 
 

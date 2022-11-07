@@ -39,7 +39,7 @@ val:
   val_data: 5000
 
   text_metrics:
-    - name: "qualitative_batch_evaluation_whitespace_correction"
+    - name: "sequence_classification"
 
 model:
   name: "${MODEL_NAME}"
@@ -61,7 +61,7 @@ model:
     attention_heads: ${NUM_HEADS:8}
     dropout: 0.1
 
-    num_layers: ${NUM_LAYERS}
+    num_layers: ${NUM_LAYERS:6}
     share_parameters: false
     activation: "gelu"
 

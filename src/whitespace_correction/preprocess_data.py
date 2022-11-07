@@ -3,6 +3,7 @@ import json
 import multiprocessing as mp
 import os
 import random
+import shutil
 import time
 from typing import Dict, List, Optional, Union
 
@@ -21,6 +22,7 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("-c", "--config", type=str, required=True,
                         help="Path to config file")
+    parser.add_argument("--overwrite", action="store_true", help="Overwrite output dir if it exists")
     return parser.parse_args()
 
 
@@ -238,7 +240,12 @@ if __name__ == "__main__":
     logger.info(f"using data preprocessing config:\n"
                 f"{config}")
 
-    os.makedirs(config.output_dir, exist_ok=True)
+    if os.path.exists(config.output_dir):
+        if args.overwrite:
+            shutil.rmtree(config.output_dir, ignore_errors=True)
+        else:
+            raise RuntimeError(f"output dir {config.output_dir} already exists, specify --overwrite to overwrite it")
+    os.makedirs(config.output_dir)
 
     # save copy of config file to output directory
     with open(os.path.join(config.output_dir, "config.yaml"), "w", encoding="utf8") as f:
