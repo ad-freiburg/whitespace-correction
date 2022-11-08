@@ -48,7 +48,8 @@ model:
   pretrained: ${PRETRAINED:null}
 
   encoder:
-    tokenizer: "char"
+    tokenizer:
+      name: "char"
 
     pretrained: ${ENCODER_PRETRAINED:null}
 
@@ -59,7 +60,7 @@ model:
 
     type: lstm
     bidirectional: true
-    num_layers: ${NUM_LAYERS}
+    num_layers: ${NUM_LAYERS:3}
 
   head:
     type: "sequence_classification"

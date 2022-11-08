@@ -48,7 +48,8 @@ model:
   pretrained: ${PRETRAINED:null}
 
   encoder:
-    tokenizer: "byte"
+    tokenizer:
+      name: "byte"
 
     pretrained: ${ENCODER_PRETRAINED:null}
 

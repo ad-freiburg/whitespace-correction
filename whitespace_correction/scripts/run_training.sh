@@ -1,10 +1,10 @@
 #!/bin/bash
 #SBATCH --partition=alldlc_gpu-rtx2080
-#SBATCH --gres=gpu:8
-#SBATCH --ntasks=1
-#SBATCH --nodes=1
-#SBATCH --job-name=training_tokenization_repair
-#SBATCH --mail-user=sebastian.walter98@gmail.com
+#SBATCH --gres=gpu:2
+#SBATCH --ntasks-per-node=2
+#SBATCH --nodes=4
+#SBATCH --job-name=training
+#SBATCH --mail-user=swalter@cs.uni-freiburg.de
 #SBATCH --mail-type=END,FAIL
 #SBATCH --time=24:00:00
 
@@ -20,8 +20,9 @@ else
 fi
 script_dir=$(dirname $script_dir)
 workspace=$(realpath $script_dir/../..)
+code=$(realpath $workspace/src/whitespace_correction)
 cd $workspace
-echo "Script is located at $script_dir, workspace is $workspace"
+echo "Script is located at $script_dir, workspace is $workspace, code is at $code"
 
 if [[ $is_local == true ]]; then
   echo "Running locally"
@@ -34,15 +35,11 @@ else
   export NCCL_IB_DISABLE=1
 
   master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-  world_size=${WORLD_SIZE?"env variable WORLD_SIZE not found"}
+  world_size=${WORLD_SIZE:8}
   echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
 fi
 
-rsync -ah --progress $LMDB_PATH $TMPDIR/lmdb
-export LMDB_PATH=$TMPDIR/lmdb
 export EXPERIMENT_DIR=${EXPERIMENT_DIR:-$workspace/experiments}
-
-echo "lmdb path: $LMDB_PATH"
 
 # for pytorch distributed
 export MASTER_ADDR=$master_addr
@@ -59,10 +56,10 @@ fi
 
 if [[ $config != "" ]]; then
   echo "Starting training with config $config"
-  train_cmd="-W ignore -m wsc.train --config $config"
+  train_cmd="$code/train.py --config $config"
 else
   echo "Resuming training from experiment $resume"
-  train_cmd="-W ignore -m wsc.train --resume $resume --overwrite-train-data $LMDB_PATH"
+  train_cmd="$code/train.py --resume $resume --overwrite-train-data $LMDB_PATH"
 fi
 
 if [[ $is_local == true ]]; then
@@ -73,5 +70,5 @@ if [[ $is_local == true ]]; then
     $train_cmd
 else
   echo "Starting Slurm training with cmd $train_cmd"
-  srun python $train_cmd
+  srun python3 -W ignore $train_cmd
 fi
