@@ -83,15 +83,15 @@ def prepare_batch(
 
 def train_one_epoch(
         model: DDP,
+        info: DistributedInfo,
         encoder_tokenizer: toklib.Tokenizer,
         decoder_tokenizer: toklib.Tokenizer,
         train_loader: DataLoader,
         val_loader: DataLoader,
         optimizer: optim.Optimizer,
         criterion: nn.Module,
-        summary_writer: SummaryWriter,
-        info: DistributedInfo,
-        checkpoint_dir: str,
+        summary_writer: Optional[SummaryWriter],
+        checkpoint_dir: Optional[str],
         lr_scheduler: Optional[LR_SCHEDULER_TYPE],
         mixed_prec_scaler: amp.GradScaler,
         eval_interval: Union[int, float],
@@ -424,9 +424,9 @@ def train(
 
     mixed_prec_scaler = amp.GradScaler(enabled=cfg.train.mixed_precision)
 
-    summary_writer = SummaryWriter(log_dir=directories["tensorboard"])
-
     if info.is_main_process:
+        summary_writer = SummaryWriter(log_dir=directories["tensorboard"])
+
         logger.info(f"Using model:\n{model}")
         logger.info(f"Model parameters: {common.get_num_parameters(model)}")
 
@@ -438,6 +438,8 @@ def train(
 
         logger.info(f"Type 'tensorboard --logdir {directories['tensorboard']}' "
                     f"to view the training process in Tensorboard")
+    else:
+        summary_writer = None
 
     if resuming:
         last_checkpoint = io.last_n_checkpoints(directories["checkpoints"], 1)[0]
@@ -587,8 +589,8 @@ def main(args: argparse.Namespace, info: DistributedInfo) -> None:
 
     directories = {
         "experiment": experiment_dir,
-        "checkpoints": os.path.join(experiment_dir, "checkpoints"),
-        "tensorboard": os.path.join(experiment_dir, "tensorboard")
+        "checkpoints": os.path.join(experiment_dir, "checkpoints") if experiment_dir is not None else None,
+        "tensorboard": os.path.join(experiment_dir, "tensorboard") if experiment_dir is not None else None
     }
     if info.is_main_process:
         os.makedirs(directories["checkpoints"], exist_ok=True)
