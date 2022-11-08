@@ -2,13 +2,15 @@ data:
   - "${INPUT_DATA_EN}"
   - "${INPUT_DATA_DE}"
 
+# must be in same order as data
 language_codes:
   - en
   - de
 
 output_dir: "${OUTPUT_DIR}"
 
-tokenizer: "byte"
+tokenizer:
+  name: "byte"
 
 seed: 22
 

@@ -72,7 +72,7 @@ class BaseConfig:
 
 
 class TokenizerConfig(BaseConfig):
-    required_arguments = "name"
+    required_arguments = {"name"}
 
     def __init__(
             self,

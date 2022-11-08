@@ -3,7 +3,8 @@ data:
 
 output_dir: "${OUTPUT_DIR}"
 
-tokenizer: "char"
+tokenizer:
+  name: "char"
 
 seed: 22
 

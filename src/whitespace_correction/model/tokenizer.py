@@ -6,7 +6,7 @@ from whitespace_correction.utils import constants, whitespace_correction
 from whitespace_correction.utils.config import TokenizerConfig
 
 Tokenization = Tuple[List[int], Dict[str, Any]]
-AdditionalTokens = Tuple[str, ...]
+AdditionalTokens = Tuple[str]
 BatchAdditionalTokens = Union[AdditionalTokens, List[AdditionalTokens]]
 
 
@@ -15,8 +15,8 @@ class Tokenizer:
 
     def __init__(
             self,
-            default_prefix_tokens: Tuple[str, ...],
-            default_suffix_tokens: Tuple[str, ...]
+            default_prefix_tokens: Tuple[str],
+            default_suffix_tokens: Tuple[str]
     ):
         self.reverse_vocab = {
             v: k for k, v in self.vocab.items()
@@ -122,9 +122,9 @@ class Tokenizer:
 class ByteTokenizer(Tokenizer):
     def __init__(
             self,
-            default_prefix_tokens: Tuple[str, ...],
-            default_suffix_tokens: Tuple[str, ...],
-            additional_tokens: Optional[List[str, ...]] = None
+            default_prefix_tokens: Tuple[str],
+            default_suffix_tokens: Tuple[str],
+            additional_tokens: Optional[List[str]] = None
     ) -> None:
         self.vocab = {
             **{chr(i): i for i in range(256)},
@@ -200,9 +200,9 @@ _ALL_CHARS = string.ascii_letters + string.digits + string.punctuation + " "
 class CharacterTokenizer(Tokenizer):
     def __init__(
             self,
-            default_prefix_tokens: Tuple[str, ...],
-            default_suffix_tokens: Tuple[str, ...],
-            additional_tokens: Optional[List[str, ...]] = None
+            default_prefix_tokens: Tuple[str],
+            default_suffix_tokens: Tuple[str],
+            additional_tokens: Optional[List[str]] = None
     ) -> None:
         self.vocab = {
             **{c: i for i, c in enumerate(_ALL_CHARS)},
@@ -230,8 +230,8 @@ class CharacterTokenizer(Tokenizer):
 
 def get_tokenizer_from_config(config: TokenizerConfig) -> Tokenizer:
     if config.name == "char":
-        return CharacterTokenizer(config.num_prefix_tokens, config.num_suffix_tokens)
+        return CharacterTokenizer(config.default_prefix_tokens, config.default_suffix_tokens, config.additional_tokens)
     elif config.name == "byte":
-        return ByteTokenizer(config.num_prefix_tokens, config.num_suffix_tokens)
+        return ByteTokenizer(config.default_prefix_tokens, config.default_suffix_tokens, config.additional_tokens)
     else:
         raise ValueError(f"unknown tokenizer {config.name}")
