@@ -12,12 +12,9 @@ SPECIAL_TOKENS = [UNK, BOS, EOS, PAD]
 EXTENDED_SPECIAL_TOKENS = SPECIAL_TOKENS + [SEP, MASK]
 
 # tokens for marking the language of a text (including a unknown language token)
-UNK_LANG = "[unk]"
-EN = "[en]"
-DE = "[de]"
-ES = "[es]"
-FR = "[fr]"
-IT = "[it]"
-PT = "[pt]"
-
-LANGUAGE_TOKENS = [UNK_LANG, EN, DE, ES, FR, IT, PT]
+LANGUAGE_CODES = ["unk", "en", "de", "es", "fr", "it", "pt"]
+LANGUAGE_CODES_TO_TOKENS = {
+    lc: f"[{lc}]"
+    for lc in LANGUAGE_CODES
+}
+LANGUAGE_TOKENS = [LANGUAGE_CODES_TO_TOKENS[lc] for lc in LANGUAGE_CODES]

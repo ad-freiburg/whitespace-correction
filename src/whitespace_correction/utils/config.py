@@ -1,8 +1,10 @@
 import os
 import re
-from typing import Any, Dict, List, Optional, Set, Union, cast
+from typing import Any, Dict, List, Optional, Set, Union, cast, Tuple
 
 import yaml
+
+from whitespace_correction.utils import constants
 
 
 class BaseConfig:
@@ -72,18 +74,26 @@ class BaseConfig:
 class TokenizerConfig(BaseConfig):
     required_arguments = "name"
 
-    def __init__(self, name: str, num_prefix_tokens: int, num_suffix_tokens: int) -> None:
+    def __init__(
+            self,
+            name: str,
+            default_prefix_tokens: Tuple[str, ...],
+            default_suffix_tokens: Tuple[str, ...],
+            additional_tokens: Optional[List[str]]
+    ) -> None:
         self.name = name
-        self.num_prefix_tokens = num_prefix_tokens
-        self.num_suffix_tokens = num_suffix_tokens
+        self.default_prefix_tokens = default_prefix_tokens
+        self.default_suffix_tokens = default_suffix_tokens
+        self.additional_tokens = additional_tokens
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "TokenizerConfig":
         cls._check_required(d)
         config = TokenizerConfig(
             name=d["name"],
-            num_prefix_tokens=d.get("num_prefix_tokens", 1),
-            num_suffix_tokens=d.get("num_suffix_tokens", 1)
+            default_prefix_tokens=d.get("default_prefix_tokens", (constants.BOS,)),
+            default_suffix_tokens=d.get("default_suffix_tokens", (constants.EOS,)),
+            additional_tokens=d.get("additional_tokens")
         )
         return config
 
@@ -154,8 +164,8 @@ class TrainConfig(BaseConfig):
                  train_data: str,
                  in_memory: bool,
                  num_workers: int,
-                 batch_size: int,
-                 batch_max_tokens: int,
+                 batch_size: Optional[int],
+                 batch_max_tokens: Optional[int],
                  min_seq_length: int,
                  max_seq_length: int,
                  optimizer: OptimizerConfig,
@@ -179,8 +189,8 @@ class TrainConfig(BaseConfig):
         self.keep_last_n_checkpoints: int = keep_last_n_checkpoints
         self.in_memory: bool = in_memory
         self.num_workers: int = num_workers
-        self.batch_size: int = batch_size
-        self.batch_max_tokens: int = batch_max_tokens
+        self.batch_size = batch_size
+        self.batch_max_tokens = batch_max_tokens
         self.train_data: str = train_data
 
     @classmethod
@@ -510,12 +520,14 @@ class Config(BaseConfig):
             model_config = TransformerModelConfig.from_dict(d["model"])
         else:
             model_config = RNNModelConfig.from_dict(d["model"])
-        config = Config(experiment=d["experiment"],
-                        experiment_dir=d.get("experiment_dir", "experiments"),
-                        seed=d.get("seed", None),
-                        train=train_config,
-                        val=val_config,
-                        model=model_config)
+        config = Config(
+            experiment=d["experiment"],
+            experiment_dir=d.get("experiment_dir", "experiments"),
+            seed=d.get("seed", 22),
+            train=train_config,
+            val=val_config,
+            model=model_config
+        )
         return config
 
 
@@ -543,23 +555,25 @@ class DataPreprocessingConfig(BaseConfig):
 
     def __init__(self,
                  data: List[str],
+                 language_codes: Optional[List[str]],
                  seed: int,
                  output_dir: str,
                  tokenizer: TokenizerConfig,
                  target_tokenizer: Optional[TokenizerConfig],
                  preprocessing: List[PreprocessingConfig],
                  lmdb_name: str,
-                 max_sequences: int,
-                 max_sequence_length: int):
+                 max_sequences: Optional[int],
+                 max_sequence_length: Optional[int]):
         self.data: List[str] = data
+        self.language_codes = language_codes
         self.seed: int = seed
         self.output_dir: str = output_dir
         self.tokenizer = tokenizer
         self.target_tokenizer = target_tokenizer
         self.preprocessing: List[PreprocessingConfig] = preprocessing
         self.lmdb_name: str = lmdb_name
-        self.max_sequences: int = max_sequences
-        self.max_sequence_length: int = max_sequence_length
+        self.max_sequences = max_sequences
+        self.max_sequence_length = max_sequence_length
 
     @classmethod
     def from_dict(cls, d: Dict[str, Any]) -> "DataPreprocessingConfig":
@@ -570,13 +584,14 @@ class DataPreprocessingConfig(BaseConfig):
             preprocessing_config = []
         config = DataPreprocessingConfig(
             data=d["data"],
-            seed=d.get("seed", None),
+            seed=d.get("seed", 22),
             output_dir=d["output_dir"],
             tokenizer=TokenizerConfig.from_dict(d["tokenizer"]),
             target_tokenizer=TokenizerConfig.from_dict(d["target_tokenizer"]) if "target_tokenizer" in d else None,
             preprocessing=preprocessing_config,
             lmdb_name=d.get("lmdb_name", "lmdb"),
             max_sequences=d.get("max_sequences", None),
-            max_sequence_length=d.get("max_sequence_length", None)
+            max_sequence_length=d.get("max_sequence_length", None),
+            language_codes=d.get("language_codes", None)
         )
         return config

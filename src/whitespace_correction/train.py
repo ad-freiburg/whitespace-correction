@@ -384,9 +384,8 @@ def train(
         f"({device_props.major}.{device_props.minor}, {device_props.multi_processor_count})"
     )
 
-    if cfg.seed:
-        torch.manual_seed(cfg.seed)
-        torch.cuda.manual_seed(cfg.seed)
+    torch.manual_seed(cfg.seed)
+    torch.cuda.manual_seed(cfg.seed)
 
     torch.backends.cudnn.benchmark = True
     torch.use_deterministic_algorithms(False)
@@ -401,7 +400,8 @@ def train(
         val_config=cfg.val,
         seed=cfg.seed,
         input_pad_token_id=input_pad_token_id,
-        target_pad_token_id=tgt_pad_token_id
+        target_pad_token_id=tgt_pad_token_id,
+        info=info
     )
 
     criterion = loss.get_loss_from_config(

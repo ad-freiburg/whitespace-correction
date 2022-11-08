@@ -279,15 +279,14 @@ if __name__ == "__main__":
         for g in config.data
         for file in io.glob_safe(g)
     ]
-    if config.seed is not None:
-        rand = random.Random(config.seed)
-        rand.shuffle(files)
+    rand = random.Random(config.seed)
+    rand.shuffle(files)
 
     max_sequences = sum(io.line_count(file) for file in files)
     if config.max_sequences is not None:
         max_sequences = min(max_sequences, config.max_sequences)
 
-    max_sequence_length = config.max_sequence_length if config.max_sequence_length is not None else float("inf")
+    max_sequence_length = config.max_sequence_length or int(1e10)
     logger.info(f"number of sequences limited to {max_sequences:,} "
                 f"with a maximum sequence length of {max_sequence_length}")
 

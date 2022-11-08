@@ -1,6 +1,6 @@
 import functools
 import string
-from typing import Any, List, Tuple, Dict, Union
+from typing import Any, List, Tuple, Dict, Union, Optional
 
 from whitespace_correction.utils import constants, whitespace_correction
 from whitespace_correction.utils.config import TokenizerConfig
@@ -13,7 +13,11 @@ BatchAdditionalTokens = Union[AdditionalTokens, List[AdditionalTokens]]
 class Tokenizer:
     vocab: Dict[str, int]
 
-    def __init__(self, num_prefix_tokens: int = 1, num_suffix_tokens: int = 1):
+    def __init__(
+            self,
+            default_prefix_tokens: Tuple[str, ...],
+            default_suffix_tokens: Tuple[str, ...]
+    ):
         self.reverse_vocab = {
             v: k for k, v in self.vocab.items()
         }
@@ -25,8 +29,8 @@ class Tokenizer:
         self.unk_token_id = self.vocab[constants.UNK]
         self.pad_token_id = self.vocab[constants.PAD]
 
-        self.num_prefix_tokens = num_prefix_tokens
-        self.num_suffix_tokens = num_suffix_tokens
+        self.default_prefix_tokens = default_prefix_tokens
+        self.default_suffix_tokens = default_suffix_tokens
 
     def _check_token_id(self, t: int, with_special_tokens: bool) -> bool:
         return with_special_tokens or t not in self.special_token_ids
@@ -36,8 +40,12 @@ class Tokenizer:
         return len(self.vocab)
 
     @property
-    def num_added_tokens(self) -> int:
-        return self.num_prefix_tokens + self.num_suffix_tokens
+    def num_prefix_tokens(self) -> int:
+        return len(self.default_prefix_tokens)
+
+    @property
+    def num_suffix_tokens(self) -> int:
+        return len(self.default_suffix_tokens)
 
     def normalize(self, sequence: str) -> str:
         return self.normalize_batch([sequence])[0]
@@ -54,17 +62,19 @@ class Tokenizer:
     def tokenize(
             self,
             sequence: str,
-            prefix_tokens: AdditionalTokens = (constants.BOS,),
-            suffix_tokens: AdditionalTokens = (constants.EOS,)
+            prefix_tokens: Optional[AdditionalTokens] = None,
+            suffix_tokens: Optional[AdditionalTokens] = None
     ) -> Tokenization:
         return self.tokenize_batch([sequence], prefix_tokens, suffix_tokens)[0]
 
     def _check_prefix_suffix_tokens(
             self,
             sequences: List[str],
-            prefix_tokens: BatchAdditionalTokens = (constants.BOS,),
-            suffix_tokens: BatchAdditionalTokens = (constants.EOS,)
+            prefix_tokens: Optional[BatchAdditionalTokens] = None,
+            suffix_tokens: Optional[BatchAdditionalTokens] = None
     ) -> Tuple[BatchAdditionalTokens, BatchAdditionalTokens]:
+        prefix_tokens = prefix_tokens or self.default_prefix_tokens
+        suffix_tokens = suffix_tokens or self.default_suffix_tokens
         if isinstance(prefix_tokens, tuple):
             prefix_tokens = [prefix_tokens] * len(sequences)
         if isinstance(suffix_tokens, tuple):
@@ -83,8 +93,8 @@ class Tokenizer:
     def tokenize_batch(
             self,
             sequences: List[str],
-            prefix_tokens: BatchAdditionalTokens = (constants.BOS,),
-            suffix_tokens: BatchAdditionalTokens = (constants.EOS,)
+            prefix_tokens: Optional[BatchAdditionalTokens] = None,
+            suffix_tokens: Optional[BatchAdditionalTokens] = None
     ) -> List[Tokenization]:
         prefix_tokens, suffix_tokens = self._check_prefix_suffix_tokens(sequences, prefix_tokens, suffix_tokens)
         tokenizations = []
@@ -110,12 +120,22 @@ class Tokenizer:
 
 
 class ByteTokenizer(Tokenizer):
-    def __init__(self, num_prefix_tokens: int = 1, num_suffix_tokens: int = 1) -> None:
+    def __init__(
+            self,
+            default_prefix_tokens: Tuple[str, ...],
+            default_suffix_tokens: Tuple[str, ...],
+            additional_tokens: Optional[List[str, ...]] = None
+    ) -> None:
         self.vocab = {
             **{chr(i): i for i in range(256)},
             **{st: 256 + i for i, st in enumerate(constants.SPECIAL_TOKENS)}
         }
-        super().__init__(num_prefix_tokens, num_suffix_tokens)
+        if additional_tokens is not None:
+            self.vocab = {
+                **self.vocab,
+                **{at: len(self.vocab) + i for i, at in enumerate(additional_tokens)}
+            }
+        super().__init__(default_prefix_tokens, default_suffix_tokens)
 
         self.special_token_bytes = {
             self.token_to_id(token): list(token.encode("utf8")) for token in constants.SPECIAL_TOKENS
@@ -143,8 +163,8 @@ class ByteTokenizer(Tokenizer):
     def tokenize_batch(
             self,
             sequences: List[str],
-            prefix_tokens: BatchAdditionalTokens = (constants.BOS,),
-            suffix_tokens: BatchAdditionalTokens = (constants.EOS,)
+            prefix_tokens: Optional[BatchAdditionalTokens] = None,
+            suffix_tokens: Optional[BatchAdditionalTokens] = None
     ) -> List[Tokenization]:
         prefix_tokens, suffix_tokens = self._check_prefix_suffix_tokens(sequences, prefix_tokens, suffix_tokens)
         tokenizations = []
@@ -178,12 +198,22 @@ _ALL_CHARS = string.ascii_letters + string.digits + string.punctuation + " "
 
 
 class CharacterTokenizer(Tokenizer):
-    def __init__(self, num_prefix_tokens: int = 1, num_suffix_tokens: int = 1) -> None:
+    def __init__(
+            self,
+            default_prefix_tokens: Tuple[str, ...],
+            default_suffix_tokens: Tuple[str, ...],
+            additional_tokens: Optional[List[str, ...]] = None
+    ) -> None:
         self.vocab = {
             **{c: i for i, c in enumerate(_ALL_CHARS)},
             **{st: len(_ALL_CHARS) + i for i, st in enumerate(constants.SPECIAL_TOKENS)}
         }
-        super().__init__(num_prefix_tokens, num_suffix_tokens)
+        if additional_tokens is not None:
+            self.vocab = {
+                **self.vocab,
+                **{at: len(self.vocab) + i for i, at in enumerate(additional_tokens)}
+            }
+        super().__init__(default_prefix_tokens, default_suffix_tokens)
 
     def split_batch(self, sequences: List[str]) -> List[List[str]]:
         return [list(sequence) for sequence in sequences]
