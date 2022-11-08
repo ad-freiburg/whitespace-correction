@@ -29,13 +29,8 @@ if [[ $is_local == true ]]; then
   master_addr="127.0.0.1"
   world_size=$(python -c "import torch; print(torch.cuda.device_count())")
 else
-  export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
-
-  export NCCL_SOCKET_IFNAME=eth0
-  export NCCL_IB_DISABLE=1
-
   master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-  world_size=${WORLD_SIZE:8}
+  world_size=${WORLD_SIZE:-8}
   echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
 fi
 
