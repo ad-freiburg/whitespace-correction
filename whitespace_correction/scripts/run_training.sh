@@ -1,9 +1,11 @@
 #!/bin/bash
 #SBATCH --partition=alldlc_gpu-rtx2080
 #SBATCH --ntasks-per-node=2
+#SBATCH --gres=gpu:$SLURM_NTASKS_PER_NODE
 #SBATCH --gpus-per-task=1
 #SBATCH --nodes=4
 #SBATCH --job-name=training
+#SBATCH --output=${MODEL_NAME:-$SLURM_JOB_ID}.slurm
 #SBATCH --mail-user=swalter@cs.uni-freiburg.de
 #SBATCH --mail-type=END,FAIL
 #SBATCH --time=24:00:00
