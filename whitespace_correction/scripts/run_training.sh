@@ -33,6 +33,9 @@ else
   # tasks get the same port
   master_port=$(python3 -c "import random; print(random.Random($SLURM_JOB_ID).randint(10000, 60000))")
   world_size=$(( $SLURM_NTASKS_PER_NODE * $SLURM_JOB_NUM_NODES ))
+  # copy lmdb to local tmpdir for faster access on each node
+  rsync -ah --progress $LMDB_PATH $TMPDIR/lmdb
+  export LMDB_PATH=$TMPDIR/lmdb
   echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
 fi
 
