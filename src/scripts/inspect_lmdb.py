@@ -42,7 +42,7 @@ if __name__ == "__main__":
         all_lengths = []
 
         lengths_keys = msgpack.loads(txn.get(b"__lengths__"))
-        for length_key in tqdm(lengths_keys, "Reading lengths"):
+        for length_key in tqdm(lengths_keys, "Reading lengths", leave=False):
             lengths = msgpack.loads(txn.get(length_key))
             all_lengths.extend(lengths)
 
@@ -54,8 +54,8 @@ if __name__ == "__main__":
 
         if args.class_distribution:
             key_keys = msgpack.loads(txn.get(b"__keys__"))
-            for key_key in key_keys:
-                for key in msgpack.loads(txn.get(key_key)):
+            for key_key in tqdm(key_keys, "Reading keys", leave=False):
+                for key in tqdm(msgpack.loads(txn.get(key_key)), "Reading items for key", leave=False):
                     data = msgpack.loads(txn.get(key))
                     for c in data["labels"]:
                         if c < 0:
