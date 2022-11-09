@@ -4,7 +4,7 @@
 #SBATCH --ntasks-per-node=2
 #SBATCH --nodes=4
 #SBATCH --job-name=training
-#SBATCH --output=${MODEL_NAME:-$SLURM_JOB_ID}.slurm
+#SBATCH --output=${MODEL_NAME?"MODEL_NAME not found"}.slurm
 #SBATCH --mail-user=swalter@cs.uni-freiburg.de
 #SBATCH --mail-type=END,FAIL
 #SBATCH --time=24:00:00
@@ -35,7 +35,7 @@ else
   master_port=$(python3 -c "import random; print(random.Random($SLURM_JOB_ID).randint(10000, 60000))")
   world_size=$(( $SLURM_NTASKS_PER_NODE * $SLURM_JOB_NUM_NODES ))
   # copy lmdb to local tmpdir for faster access on each node
-  rsync -ah --progress $LMDB_PATH $TMPDIR/lmdb
+  rsync -ah --progress ${LMDB_PATH?"LMDB_PATH not found"} $TMPDIR/lmdb
   export LMDB_PATH=$TMPDIR/lmdb
   echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
 fi
