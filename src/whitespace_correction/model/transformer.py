@@ -120,8 +120,10 @@ class PytorchEncoder(BaseEncoder):
                 dropout=self.config.dropout,
                 activation=self.config.activation
             )
-        self.encoder = nn.TransformerEncoder(encoder_layer=encoder_layer,
-                                             num_layers=1 if self.config.share_parameters else self.config.num_layers)
+        self.encoder = nn.TransformerEncoder(
+            encoder_layer=encoder_layer,
+            num_layers=1 if self.config.share_parameters else self.config.num_layers
+        )
 
         if self.config.pretrained:
             checkpoint = io.load_checkpoint(self.config.pretrained)

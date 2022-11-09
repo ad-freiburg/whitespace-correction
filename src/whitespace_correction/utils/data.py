@@ -244,14 +244,16 @@ class MaxSeqLenDataset(Dataset, SequenceDatasetMixin):
 
 
 class BucketSampler(Sampler):
-    def __init__(self,
-                 data_source: Union[PretokenizedDataset, Subset],
-                 max_tokens: int,
-                 min_seq_len: int,
-                 max_seq_len: int,
-                 bucket_span: int,
-                 shuffle: bool = False,
-                 seed: int = 22) -> None:
+    def __init__(
+            self,
+            data_source: Union[PretokenizedDataset, Subset],
+            max_tokens: int,
+            min_seq_len: int,
+            max_seq_len: int,
+            bucket_span: int,
+            shuffle: bool = False,
+            seed: int = 22
+    ) -> None:
         super().__init__(data_source)
         self.data_source = data_source
         self.min_seq_len = min_seq_len
@@ -363,15 +365,22 @@ class SamplerDataset(Dataset):
 # modified version of
 # https://catalyst-team.github.io/catalyst/_modules/catalyst/data/sampler.html#DistributedSamplerWrapper
 class DistributedDynamicSampler(DistributedSampler):
-    def __init__(self,
-                 sampler: Sampler,
-                 seed: int,
-                 drop_last: bool = False,
-                 shuffle: bool = True) -> None:
-        super().__init__(SamplerDataset(sampler),
-                         shuffle=shuffle,
-                         seed=seed,
-                         drop_last=drop_last)
+    def __init__(
+            self,
+            sampler: Sampler,
+            info: DistributedInfo,
+            seed: int,
+            drop_last: bool = True,
+            shuffle: bool = True
+    ) -> None:
+        super().__init__(
+            SamplerDataset(sampler),
+            num_replicas=info.world_size,
+            rank=info.rank,
+            shuffle=shuffle,
+            seed=seed,
+            drop_last=drop_last
+        )
         self.sampler = sampler
         self.steps_to_fast_forward = 0
 
@@ -490,7 +499,7 @@ def get_data_from_config(
             drop_last=False
         )
 
-    train_sampler_dist = DistributedDynamicSampler(sampler=train_sampler, shuffle=True, seed=seed, drop_last=True)
+    train_sampler_dist = DistributedDynamicSampler(sampler=train_sampler, info=info, seed=seed)
 
     train_loader = DataLoader(
         train_dataset,

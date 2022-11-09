@@ -381,7 +381,8 @@ def train(
     logger.info(
         f"[GPU:{info.rank}:{info.local_rank}] {device_props.name}, "
         f"{device_props.total_memory // 1024 // 1024:.0f}MiB "
-        f"({device_props.major}.{device_props.minor}, {device_props.multi_processor_count})"
+        f"({device_props.major}.{device_props.minor}, {device_props.multi_processor_count}), "
+        f"num_threads={torch.get_num_threads()}"
     )
 
     torch.manual_seed(cfg.seed)
