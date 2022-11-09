@@ -1,14 +1,12 @@
 #!/bin/bash
 #SBATCH --partition=alldlc_gpu-rtx2080
-#SBATCH --gres=gpu:2
 #SBATCH --ntasks-per-node=2
+#SBATCH --gpus-per-task=1
 #SBATCH --nodes=4
 #SBATCH --job-name=training
 #SBATCH --mail-user=swalter@cs.uni-freiburg.de
 #SBATCH --mail-type=END,FAIL
 #SBATCH --time=24:00:00
-
-master_port=${MASTER_PORT:-33334}
 
 force_local=${FORCE_LOCAL:-false}
 if [[ -n $SLURM_JOB_ID && $force_local == false ]] ; then
@@ -27,10 +25,14 @@ echo "Script is located at $script_dir, workspace is $workspace, code is at $cod
 if [[ $is_local == true ]]; then
   echo "Running locally"
   master_addr="127.0.0.1"
-  world_size=$(python -c "import torch; print(torch.cuda.device_count())")
+  master_port="33334"
+  world_size=$(python3 -c "import torch; print(torch.cuda.device_count())")
 else
   master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
-  world_size=${WORLD_SIZE:-8}
+  # set the master port to a random port on the slurm cluster, but seed with the job id so every
+  # tasks get the same port
+  master_port=$(python3 -c "import random; print(random.Random($SLURM_JOB_ID).randint(10000, 60000))")
+  world_size=$(( $SLURM_NTASKS_PER_NODE * $SLURM_JOB_NUM_NODES ))
   echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
 fi
 
