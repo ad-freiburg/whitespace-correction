@@ -163,8 +163,11 @@ def train_one_epoch(
                 additional_losses[loss_name].add(loss_value.detach())
 
             mean_forward_pass.add((end_forward - start_forward) * 1000)
-            mean_bsz.add(labels.shape[0])
-            batch_sizes.append(labels.shape[0])
+            # approximation since we expect every process to roughly
+            # have the same batch size
+            batch_size = labels.shape[0] * info.world_size
+            mean_bsz.add(batch_size)
+            batch_sizes.append(batch_size)
             batch_padded_seq_lengths.append(inputs[0].shape[0])
 
         if lr_scheduler is not None:
