@@ -2,7 +2,6 @@ import argparse
 import os
 import re
 import shutil
-import sys
 import time
 from contextlib import redirect_stdout
 from datetime import datetime
