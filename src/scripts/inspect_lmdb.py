@@ -12,8 +12,25 @@ from whitespace_correction.utils import common
 def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument("--lmdb", type=str, required=True)
-    parser.add_argument("--class-distribution", action="store_true")
+    parser.add_argument("--class-distribution", type=int, default=None)
     return parser.parse_args()
+
+
+def calc_class_distribution(transaction: lmdb.Transaction, max_items: int) -> Counter:
+    cls = Counter()
+    counter = 0
+    key_keys = msgpack.loads(transaction.get(b"__keys__"))
+    for key_key in tqdm(key_keys, "Reading keys", leave=False):
+        for key in tqdm(msgpack.loads(transaction.get(key_key)), "Reading items for key", leave=False):
+            if counter >= max_items:
+                return cls
+            data = msgpack.loads(transaction.get(key))
+            counter += 1
+            for c in data["labels"]:
+                if c < 0:
+                    continue
+                cls[c] += 1
+    return cls
 
 
 if __name__ == "__main__":
@@ -29,8 +46,6 @@ if __name__ == "__main__":
                     lock=False,
                     readahead=False,
                     meminit=False)
-
-    classes = Counter()
 
     with env.begin(write=False) as txn:
         length = msgpack.loads(txn.get(b"__len__"))
@@ -53,14 +68,7 @@ if __name__ == "__main__":
         logger.info(f"Median sample length is {all_lengths_sorted[len(all_lengths_sorted) // 2]}")
 
         if args.class_distribution:
-            key_keys = msgpack.loads(txn.get(b"__keys__"))
-            for key_key in tqdm(key_keys, "Reading keys", leave=False):
-                for key in tqdm(msgpack.loads(txn.get(key_key)), "Reading items for key", leave=False):
-                    data = msgpack.loads(txn.get(key))
-                    for c in data["labels"]:
-                        if c < 0:
-                            continue
-                        classes[c] += 1
-            total_classes = sum(classes.values())
+            classes = calc_class_distribution(txn, args.class_distribution)
+            total_classes = max(1, sum(classes.values()))
             relative_classes = {c: round(freq / total_classes, 2) for c, freq in classes.items()}
             logger.info(f"Class distribution in LMDB is\nabsolute:\n{dict(classes)}\nrelative:\n{relative_classes}")
