@@ -4,7 +4,7 @@
 #SBATCH --ntasks-per-node=2
 #SBATCH --nodes=4
 #SBATCH --job-name=training
-#SBATCH --output=${MODEL_NAME?"MODEL_NAME not found"}.slurm
+#SBATCH --output=$MODEL_NAME.slurm
 #SBATCH --mail-user=swalter@cs.uni-freiburg.de
 #SBATCH --mail-type=END,FAIL
 #SBATCH --time=24:00:00
