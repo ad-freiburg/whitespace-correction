@@ -1,0 +1,3 @@
+[submodule "third_party/text-correction-utils"]
+	path = third_party/text-correction-utils
+	url = https://github.com/bastiscode/text-correction-utils

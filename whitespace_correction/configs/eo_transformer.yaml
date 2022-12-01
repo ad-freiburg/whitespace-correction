@@ -1,0 +1,63 @@
+experiment:
+  name: eo_medium_transformer_byte
+  dir: abspath(env(EXPERIMENT_DIR:experiments))
+
+seed: 22
+
+input_tokenizer: file(tokenizers/byte.yaml)
+
+model:
+  type: encoder_with_head
+  embedding:
+    embedding_dim: 512
+    dropout: 0.1
+    positional_embeddings: sinusoidal
+    max_length: 512
+  encoder:
+    type: transformer
+    dim: 512
+    num_layers: 6
+    heads: 8
+    ffw_dim: 2048
+    dropout: 0.1
+    with_pos: true
+  head:
+    type: sequence_classification
+    dim: 512
+    num_layers: 2
+    dropout: 0.1
+    num_classes: 3
+
+train:
+  mixed_precision: true
+  num_epochs: 3
+  eval_interval: 0.5
+  log_interval: 0.01
+  loss:
+    type: sequence_cross_entropy
+    weights: [1, 10, 10]
+    ignore_index: -1
+    num_classes: 3
+  optimizer:
+    type: adamw
+    lr: 0.0001
+    weight_decay: 0.001
+  lr_schedule:
+    type: cosine_with_warmup
+  data:
+    strategy: weighted
+    shuffle: true
+    shuffle_prefetch_factor: 16
+    num_threads: 4
+    batch_limit: 1024
+    batch_limit_type: num_tokens
+    pipeline:
+      preprocessing: file(preprocessings/whitespace_noise.yaml)
+      labeling:
+        type: whitespace_correction
+      tokenizer: file(tokenizers/byte.yaml)
+    sources:
+      - type: file
+        path: abspath(env(MULTI30K))
+        language: en
+    val: 10000

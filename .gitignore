@@ -140,7 +140,6 @@ rsync_exclude.txt
 
 .download
 .tensorrt_cache
-third_party
 whitespace_correction/misspellings
 whitespace_correction/data
 whitespace_correction/experiments

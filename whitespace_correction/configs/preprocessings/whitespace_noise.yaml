@@ -1,0 +1,13 @@
+- type: clean
+- type: overwrite
+- type: switch
+  configs:
+    - type: noise_whitespaces
+      insert_whitespace_prob: 0.1
+      delete_whitespace_prob: 0.1
+    - type: full_whitespaces
+    - type: no_whitespaces
+  probabilities:
+    - 0.8
+    - 0.1
+    - 0.1

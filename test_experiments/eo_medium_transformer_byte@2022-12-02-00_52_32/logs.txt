@@ -1,0 +1,104 @@
+2022-12-02 00:52:32,453 [TRAIN] [INFO] [GPU:0:0] NVIDIA GeForce GTX 1080 Ti (11,178MiB memory, 6.1 compute capability, 28 multiprocessors)
+2022-12-02 00:52:33,941 [TRAIN] [INFO] Estimating train loader length from average batch size of first 100 batches and minimum train loader items.
+2022-12-02 00:52:34,092 [TRAIN] [INFO] Got an average batch size of 15.82 after 100 batches. The train loader contains at least 19000 items, so the estimated number of training steps over 3 epochs is 3603.
+2022-12-02 00:52:35,688 [TRAIN] [INFO] Using model:
+EncoderWithHead(
+  (embedding): Embedding(
+    (embedding): TokenEmbedding(
+      (emb): Embedding(259, 512, padding_idx=258)
+    )
+    (pos_embedding): SinusoidalPositionalEmbedding()
+    (token_drop): Dropout1d(p=0.1, inplace=False)
+    (pos_drop): Dropout1d(p=0.1, inplace=False)
+  )
+  (encoder): TransformerEncoder(
+    (transformer): TransformerEncoder(
+      (layers): ModuleList(
+        (0): _TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=512, out_features=512, bias=True)
+          )
+          (linear1): Linear(in_features=512, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=512, bias=True)
+          (norm1): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+        )
+        (1): _TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=512, out_features=512, bias=True)
+          )
+          (linear1): Linear(in_features=512, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=512, bias=True)
+          (norm1): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+        )
+        (2): _TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=512, out_features=512, bias=True)
+          )
+          (linear1): Linear(in_features=512, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=512, bias=True)
+          (norm1): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+        )
+        (3): _TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=512, out_features=512, bias=True)
+          )
+          (linear1): Linear(in_features=512, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=512, bias=True)
+          (norm1): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+        )
+        (4): _TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=512, out_features=512, bias=True)
+          )
+          (linear1): Linear(in_features=512, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=512, bias=True)
+          (norm1): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+        )
+        (5): _TransformerEncoderLayer(
+          (self_attn): MultiheadAttention(
+            (out_proj): NonDynamicallyQuantizableLinear(in_features=512, out_features=512, bias=True)
+          )
+          (linear1): Linear(in_features=512, out_features=2048, bias=True)
+          (dropout): Dropout(p=0.1, inplace=False)
+          (linear2): Linear(in_features=2048, out_features=512, bias=True)
+          (norm1): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (norm2): LayerNorm((512,), eps=1e-05, elementwise_affine=True)
+          (dropout1): Dropout(p=0.1, inplace=False)
+          (dropout2): Dropout(p=0.1, inplace=False)
+        )
+      )
+    )
+  )
+  (head): SequenceClassificationHead(
+    (head): Sequential(
+      (0): Linear(in_features=512, out_features=512, bias=True)
+      (1): GELU(approximate='tanh')
+      (2): Dropout(p=0.1, inplace=False)
+      (3): Linear(in_features=512, out_features=3, bias=True)
+    )
+  )
+)
+2022-12-02 00:52:35,689 [TRAIN] [INFO] Model parameters: {'trainable': 19311107, 'fixed': 0, 'total': 19311107}
+2022-12-02 00:52:35,689 [TRAIN] [INFO] Testing input tokenizer:
+[256, 84, 104, 105, 115, 32, 105, 115, 32, 97, 32, 116, 101, 115, 116, 32, 115, 101, 110, 116, 101, 110, 99, 101, 46, 257]
+2022-12-02 00:52:35,689 [TRAIN] [INFO] Type 'tensorboard --logdir /home/sebastian/phd/whitespace_correction/code/test_experiments/eo_medium_transformer_byte@2022-12-02-00_52_32/tensorboard' to view the training process in Tensorboard
