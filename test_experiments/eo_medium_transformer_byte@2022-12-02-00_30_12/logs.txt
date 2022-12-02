@@ -1,1 +1,0 @@
-2022-12-02 00:30:12,802 [TRAIN] [INFO] [GPU:0:0] NVIDIA GeForce GTX 1080 Ti (11,178MiB memory, 6.1 compute capability, 28 multiprocessors)

@@ -62,13 +62,17 @@ logger = logging.get_logger("TRAIN")
 def prepare_label(
     label: Optional[Dict[str, Any]],
     input_tokenizer: tokenization.Tokenizer,
-    output_tokenizer: tokenization.Tokenizer
+    output_tokenizer: tokenization.Tokenizer,
+    max_length: int
 ) -> Any:
     assert label is not None
     if label["type"] == "sequence_classification":
         num_prefix_tokens = input_tokenizer.num_prefix_tokens()
-        num_suffix_tokens = input_tokenizer.num_suffix_tokens()
-        return [-1] * num_prefix_tokens + label["labels"] + [-1] * num_suffix_tokens
+        return (
+            [-1] * num_prefix_tokens
+            + label["labels"]
+            + [-1] * (max_length - len(label["labels"]) - num_prefix_tokens)
+        )
     else:
         raise ValueError(f"unknown labels type {label['type']}")
 
@@ -76,7 +80,8 @@ def prepare_label(
 def prepare_info(
     info: Dict[str, Any],
     input_tokenizer: tokenization.Tokenizer,
-    output_tokenizer: tokenization.Tokenizer
+    output_tokenizer: tokenization.Tokenizer,
+    max_length: int
 ) -> Dict[str, Any]:
     info_type = info.pop("type")
     if info_type == "empty":
@@ -84,8 +89,11 @@ def prepare_info(
     elif info_type == "token_groups":
         groups = info["groups"]
         num_prefix_tokens = input_tokenizer.num_prefix_tokens()
-        num_suffix_tokens = input_tokenizer.num_suffix_tokens()
-        return {"groups": [1] * num_prefix_tokens + groups + [1] * num_suffix_tokens}
+        return {"groups": (
+            [1] * num_prefix_tokens
+            + groups
+            + [1] * (max_length - len(groups) - num_prefix_tokens))
+        }
     else:
         raise ValueError(f"unknown info type {info_type}")
 
@@ -100,30 +108,22 @@ def prepare_batch(
     if model_type in {"encoder_with_head"}:
         pad_token_id = input_tokenizer.pad_token_id()
         token_ids = []
-        lengths = []
+        lengths = [len(item.tokenization.token_ids) for item in batch.items]
+        max_length = max(lengths)
         labels = []
         kwargs = collections.defaultdict(list)
-        for item in batch.items:
-            token_ids.append(item.tokenization.token_ids)
-            lengths.append(len(item.tokenization.token_ids))
-            labels.append(prepare_label(item.label, input_tokenizer, output_tokenizer))
-            for k, v in prepare_info(item.tokenization.info, input_tokenizer, output_tokenizer):
+        for i, item in enumerate(batch.items):
+            token_ids.append(item.tokenization.token_ids + [pad_token_id] * (max_length - lengths[i]))
+            labels.append(prepare_label(item.label, input_tokenizer, output_tokenizer, max_length))
+            for k, v in prepare_info(item.tokenization.info, input_tokenizer, output_tokenizer, max_length).items():
                 kwargs[k].append(v)
 
         inputs = {
-            "token_ids": rnn.pad_sequence(
-                [torch.as_tensor(t, dtype=torch.long, device=device) for t in token_ids],
-                batch_first=True,
-                padding_value=pad_token_id
-            ).long(),
+            "token_ids": torch.as_tensor(token_ids, dtype=torch.long, device=device),
             "lengths": lengths,
             **kwargs
         }
-        labels = rnn.pad_sequence(
-            [torch.as_tensor(t, dtype=torch.long, device=device) for t in labels],
-            batch_first=True,
-            padding_value=-1
-        )
+        labels = torch.as_tensor(labels, dtype=torch.long, device=device)
 
     else:
         raise ValueError(f"unknown model type {model_type}")
@@ -166,7 +166,7 @@ def train_one_epoch(
     begin_of_epoch = time.perf_counter()
     start = time.perf_counter()
 
-    mean_loss = tensorboard.AverageTracker("train_loss")
+    mean_loss = tensorboard.AverageTracker("train_loss", fmt=".2e")
     mean_forward_pass = tensorboard.AverageTracker("train_forward_pass")
     mean_bsz = tensorboard.AverageTracker("train_batch_size")
     mean_seq_length = tensorboard.AverageTracker("train_sequence_length")
@@ -214,6 +214,7 @@ def train_one_epoch(
         if epoch_step % eval_interval == 0 and info.is_main_process:
             val_loss = evaluate(
                 model=model,
+                model_type=model_type,
                 info=info,
                 input_tokenizer=input_tokenizer,
                 output_tokenizer=output_tokenizer,
@@ -262,25 +263,24 @@ def train_one_epoch(
 
             summary_writer.add_histogram(
                 "train_batch_size_hist",
-                mean_bsz.values,
+                torch.as_tensor(mean_bsz.values),
                 step
             )
 
             summary_writer.add_histogram(
                 "train_batch_sequence_length_hist",
-                mean_seq_length.values,
+                torch.as_tensor(mean_seq_length.values),
                 step
             )
 
             end = time.perf_counter()
             logger.info(
-                f"[{step}, {epoch_step}] [train_time:{step - log_interval}\u2192{step}] "
+                f"[step {step}] [train_time:{step - log_interval}\u2192{step}] "
                 f"{(end - start) / 60:.2f} minutes"
             )
-            estimated_steps = train_loader.min_items() // max(mean_bsz.value, 1)
             logger.info(
-                f"[{step}, {epoch_step}] [epoch:{epoch + 1}] "
-                f"{logging.eta_minutes_message((end - begin_of_epoch) / 60, epoch_step, estimated_steps)}"
+                f"[step {step}] [epoch:{epoch + 1}] "
+                f"{logging.eta_minutes_message((end - begin_of_epoch) / 60, epoch_step, training_steps)}"
             )
 
             mean_loss.reset()
@@ -396,7 +396,8 @@ def train(
         total_batch_size += len(batch)
         idx += 1
     avg_batch_size = total_batch_size / num_batches
-    training_steps = round(cfg["train"]["num_epochs"] * train_loader.min_items() / avg_batch_size)
+    training_steps_per_epoch = train_loader.min_items() / avg_batch_size
+    training_steps = round(cfg["train"]["num_epochs"] * training_steps_per_epoch)
     logger.info(f"Got an average batch size of {avg_batch_size:.2f} after {num_batches} batches. "
                 f"The train loader contains at least {train_loader.min_items()} items, so the estimated "
                 f"number of training steps over {cfg['train']['num_epochs']} epochs is {training_steps}.")
@@ -470,7 +471,7 @@ def train(
             model_type=cfg["model"]["type"],
             input_tokenizer=input_tokenizer,
             output_tokenizer=output_tokenizer,
-            training_steps=training_steps,
+            training_steps=round(training_steps_per_epoch),
             train_loader=train_loader,
             val_loader=val_loader,
             optimizer=optimizer,

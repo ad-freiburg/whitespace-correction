@@ -29,7 +29,7 @@ model:
     num_classes: 3
 
 train:
-  mixed_precision: true
+  mixed_precision: false
   num_epochs: 3
   eval_interval: 0.5
   log_interval: 0.01
@@ -49,7 +49,7 @@ train:
     shuffle: true
     shuffle_prefetch_factor: 16
     num_threads: 4
-    batch_limit: 1024
+    batch_limit: 4096
     batch_limit_type: num_tokens
     pipeline:
       preprocessing: file(preprocessings/whitespace_noise.yaml)
