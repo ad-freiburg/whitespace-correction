@@ -6,7 +6,7 @@ from torch import nn
 
 from text_correction_utils import tokenization
 from text_correction_utils.modules.embedding import Embedding
-from text_correction_utils.modules.encoder import Encoder, TransformerEncoder, RNNEncoder, CNNEncoder
+from text_correction_utils.modules.encoder import Encoder, TransformerEncoder, RNNEncoder, CNNEncoder, GroupingEncoder
 from text_correction_utils.modules.head import Head, ClassificationHead, SequenceClassificationHead
 
 
@@ -78,6 +78,9 @@ def get_encoder_from_config(cfg: Dict[str, Any]) -> Encoder:
         return RNNEncoder(**cfg)
     elif enc_type == "cnn":
         return CNNEncoder(**cfg)
+    elif enc_type == "grouping":
+        encoder = get_encoder_from_config(cfg.pop("encoder", {}))
+        return GroupingEncoder(encoder, **cfg)
     else:
         raise ValueError(f"unknown encoder type {enc_type}")
 

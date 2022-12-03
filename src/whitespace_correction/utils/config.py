@@ -108,8 +108,6 @@ def _parse_data_sources(sources: List[Dict[str, Any]]) -> Tuple[List[str], Optio
 def get_data_from_config(
     cfg: Dict[str, Any],
     seed: int,
-    epoch: int,
-    train_skip: int,
     info: distributed.DistributedInfo
 ) -> Tuple[data.DataLoader, data.DataLoader]:
     cfg = copy.deepcopy(cfg)
@@ -154,8 +152,8 @@ def get_data_from_config(
         train_languages,
         strategy=strategy,
         batch_limit_type=batch_limit_type,
-        seed=seed + epoch,
-        skip=train_skip + (val_limit if val_limit is not None else 0),
+        seed=seed,
+        skip=val_limit if val_limit is not None else 0,
         distributed=(info.rank, info.world_size),
         **cfg
     )
@@ -167,7 +165,7 @@ def get_data_from_config(
             train_languages,
             strategy=strategy,
             batch_limit_type=batch_limit_type,
-            seed=seed + epoch,
+            seed=seed,
             limit=val_limit,
             distributed=None,
             **cfg
@@ -179,7 +177,7 @@ def get_data_from_config(
             val_languages,
             strategy=strategy,
             batch_limit_type=batch_limit_type,
-            seed=seed + epoch,
+            seed=seed,
             distributed=None,
             **cfg
         )

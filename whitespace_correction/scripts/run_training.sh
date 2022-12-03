@@ -37,12 +37,6 @@ else
   echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
 fi
 
-if [[ $is_local == false ]]; then
-  # copy lmdb to local tmpdir on slurm cluster for faster access
-  rsync -ah --progress ${LMDB_PATH?"LMDB_PATH not found"} $TMPDIR/lmdb
-  export LMDB_PATH=$TMPDIR/lmdb
-fi
-
 export EXPERIMENT_DIR=${EXPERIMENT_DIR:-$workspace/experiments}
 
 # for pytorch distributed
@@ -63,7 +57,7 @@ if [[ $config != "" ]]; then
   train_cmd="$code/train.py --config $config"
 else
   echo "Resuming training from experiment $resume"
-  train_cmd="$code/train.py --resume $resume --overwrite-train-data $LMDB_PATH"
+  train_cmd="$code/train.py --resume $resume"
 fi
 
 if [[ $is_local == true || $force_local == true ]]; then
