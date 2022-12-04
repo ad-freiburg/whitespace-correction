@@ -26,7 +26,6 @@ from torch import optim
 from torch.backends import cudnn  # noqa
 from torch.cuda import amp
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.nn.utils import rnn
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 
@@ -64,7 +63,9 @@ def prepare_label(
     max_length: int
 ) -> Any:
     assert label is not None
-    if label["type"] == "sequence_classification":
+    if label["type"] == "classification":
+        return label["label"]
+    elif label["type"] == "sequence_classification":
         num_prefix_tokens = input_tokenizer.num_prefix_tokens()
         return (
             [-1] * num_prefix_tokens
@@ -76,62 +77,57 @@ def prepare_label(
 
 
 def prepare_info(
-    info: Dict[str, Any],
-    input_tokenizer: tokenization.Tokenizer,
-    output_tokenizer: tokenization.Tokenizer,
-    max_length: int
+    info: Dict[str, Any]
 ) -> Dict[str, Any]:
     info_type = info.pop("type")
-    if info_type == "empty":
-        return {}
-    elif info_type == "token_groups":
-        groups = info["groups"]
-        num_prefix_tokens = input_tokenizer.num_prefix_tokens()
-        return {"groups": (
-            [1] * num_prefix_tokens
-            + groups
-            + [1] * (max_length - sum(groups) - num_prefix_tokens))
-        }
+    if info_type in {"empty", "token_groups"}:
+        return info
     else:
         raise ValueError(f"unknown info type {info_type}")
 
 
 def prepare_batch(
     batch: data.Batch,
-    model_type: str,
+    model_cfg: Dict[str, Any],
     device: torch.device,
     input_tokenizer: tokenization.Tokenizer,
     output_tokenizer: tokenization.Tokenizer
 ) -> Tuple[Dict[str, Any], torch.Tensor]:
-    if model_type == "encoder_with_head":
+    assert len(batch.items) > 0, "got empty batch"
+    if model_cfg["type"] == "encoder_with_head":
         pad_token_id = input_tokenizer.pad_token_id()
         token_ids = []
-        lengths = [len(item.tokenization.token_ids) for item in batch.items]
-        max_length = max(lengths)
+        token_lengths = [len(item.tokenization.token_ids) for item in batch.items]
+        max_tokens = max(token_lengths)
+        if model_cfg["encoder"]["type"] == "grouping":
+            max_groups = max(len(item.tokenization.info["groups"]) for item in batch.items)
+        else:
+            max_groups = max_tokens
         labels = []
         kwargs = collections.defaultdict(list)
         for i, item in enumerate(batch.items):
-            token_ids.append(item.tokenization.token_ids + [pad_token_id] * (max_length - lengths[i]))
-            labels.append(prepare_label(item.label, input_tokenizer, output_tokenizer, max_length))
-            for k, v in prepare_info(item.tokenization.info, input_tokenizer, output_tokenizer, max_length).items():
+            token_ids.append(item.tokenization.token_ids + [pad_token_id] * (max_tokens - token_lengths[i]))
+            for k, v in prepare_info(item.tokenization.info).items():
                 kwargs[k].append(v)
+
+            labels.append(prepare_label(item.label, input_tokenizer, output_tokenizer, max_groups))
 
         inputs = {
             "token_ids": torch.as_tensor(token_ids, dtype=torch.long, device=device),
-            "lengths": lengths,
+            "lengths": token_lengths,
             **kwargs
         }
         labels = torch.as_tensor(labels, dtype=torch.long, device=device)
 
     else:
-        raise ValueError(f"unknown model type {model_type}")
+        raise ValueError(f"unknown model type {model_cfg['type']}")
 
     return inputs, labels
 
 
 def train_one_epoch(
     model: DDP,
-    model_type: str,
+    model_cfg: Dict[str, Any],
     info: distributed.DistributedInfo,
     input_tokenizer: tokenization.Tokenizer,
     output_tokenizer: tokenization.Tokenizer,
@@ -180,7 +176,7 @@ def train_one_epoch(
 
             inputs, labels = prepare_batch(
                 batch=batch,
-                model_type=model_type,
+                model_cfg=model_cfg,
                 device=info.device,
                 input_tokenizer=input_tokenizer,
                 output_tokenizer=output_tokenizer
@@ -215,7 +211,7 @@ def train_one_epoch(
         if (epoch_step % eval_interval == 0 or batch is None) and info.is_main_process:
             val_loss = evaluate(
                 model=model,
-                model_type=model_type,
+                model_cfg=model_cfg,
                 info=info,
                 input_tokenizer=input_tokenizer,
                 output_tokenizer=output_tokenizer,
@@ -299,7 +295,7 @@ def train_one_epoch(
 @torch.inference_mode()
 def evaluate(
     model: DDP,
-    model_type: str,
+    model_cfg: Dict[str, Any],
     info: distributed.DistributedInfo,
     input_tokenizer: tokenization.Tokenizer,
     output_tokenizer: tokenization.Tokenizer,
@@ -321,7 +317,7 @@ def evaluate(
     for batch_num, batch in enumerate(val_loader):
         inputs, labels = prepare_batch(
             batch=batch,
-            model_type=model_type,
+            model_cfg=model_cfg,
             device=info.device,
             input_tokenizer=input_tokenizer,
             output_tokenizer=output_tokenizer
@@ -473,7 +469,7 @@ def train(
 
         train_one_epoch(
             model=ddp_model,
-            model_type=cfg["model"]["type"],
+            model_cfg=cfg["model"],
             input_tokenizer=input_tokenizer,
             output_tokenizer=output_tokenizer,
             training_steps=training_steps_per_epoch,

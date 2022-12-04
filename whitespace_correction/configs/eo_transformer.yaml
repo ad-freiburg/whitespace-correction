@@ -51,7 +51,8 @@ train:
   data:
     strategy: weighted
     shuffle: true
-    shuffle_prefetch_factor: 16
+    sort: true
+    shuffle_prefetch_factor: 32
     num_threads: 4
     batch_limit: env(BATCH_LIMIT:32)
     batch_limit_type: batch_size
