@@ -24,7 +24,7 @@ model:
       heads: 8
       ffw_dim: 2048
       dropout: 0.1
-      with_pos: true
+      with_pos: attention
   head:
     type: sequence_classification
     dim: env(DIM:512)
