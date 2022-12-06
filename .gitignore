@@ -134,13 +134,3 @@ dmypy.json
 # Pycharm
 .idea/
 
-# custom
-Makefile.slurm
-rsync_exclude.txt
-
-.download
-.tensorrt_cache
-whitespace_correction/misspellings
-whitespace_correction/data
-whitespace_correction/experiments
-whitespace_correction/benchmark/downloads
