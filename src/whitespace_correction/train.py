@@ -162,6 +162,7 @@ def train_one_epoch(
 
     mean_loss = tensorboard.AverageTracker("train_loss", fmt=".2e")
     mean_forward_pass = tensorboard.AverageTracker("train_forward_pass")
+    mean_batch_load = tensorboard.AverageTracker("train_batch_load")
     mean_bsz = tensorboard.AverageTracker("train_batch_size")
     mean_seq_length = tensorboard.AverageTracker("train_sequence_length")
 
@@ -169,7 +170,9 @@ def train_one_epoch(
 
     batch_num = 0
     while True:
+        start_batch = time.perf_counter()
         batch = next(train_loader, None)
+        end_batch = time.perf_counter()
         epoch_step = steps_to_fast_forward + batch_num + 1
         if batch is not None:
             step += 1
@@ -204,6 +207,7 @@ def train_one_epoch(
                 mean_bsz.add(batch_size)
                 for item in batch.items:
                     mean_seq_length.add(len(item.tokenization.token_ids))
+                mean_batch_load.add((end_batch - start_batch) * 1000)
 
         if lr_scheduler is not None:
             lr_scheduler.step()
@@ -255,6 +259,9 @@ def train_one_epoch(
             mean_forward_pass.log_tensorboard(summary_writer, step)
             mean_forward_pass.log_info(logger, step)
 
+            mean_batch_load.log_tensorboard(summary_writer, step)
+            mean_batch_load.log_info(logger, step)
+
             mean_seq_length.log_tensorboard(summary_writer, step)
             mean_seq_length.log_info(logger, step)
 
@@ -283,6 +290,7 @@ def train_one_epoch(
             mean_loss.reset()
             mean_bsz.reset()
             mean_forward_pass.reset()
+            mean_batch_load.reset()
             mean_seq_length.reset()
             start = end
 

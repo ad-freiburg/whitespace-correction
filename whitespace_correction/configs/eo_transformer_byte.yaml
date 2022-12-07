@@ -10,12 +10,12 @@ model:
   type: encoder_with_head
   embedding:
     embedding_dim: env(DIM:512)
-    dropout: 0.1
+    dropout: 0.0
     positional_embeddings: sinusoidal
     max_length: env(MAX_LENGTH:512)
   encoder:
     type: grouping
-    group_first: false
+    group_first: env(GROUP_FIRST:false)
     group_aggregation: mean
     encoder:
       type: transformer
@@ -44,7 +44,7 @@ train:
     num_classes: 3
   optimizer:
     type: adamw
-    lr: env(LR:0.0001)
+    lr: env(LR:0.0002)
     weight_decay: 0.001
   lr_schedule:
     type: cosine_with_warmup
@@ -54,10 +54,10 @@ train:
     sort: true
     shuffle_prefetch_factor: 32
     num_threads: 4
-    batch_limit: env(BATCH_LIMIT:32)
-    batch_limit_type: env(BATCH_LIMIT_TYPE:batch_size)
+    batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
+    batch_limit_type: env(BATCH_LIMIT_TYPE:num_tokens)
     pipeline:
-      preprocessing: file(preprocessings/whitespace_noise.yaml)
+      preprocessing: file(preprocessings/whitespace_noise_byte.yaml)
       labeling:
         type: whitespace_correction
       tokenizer: file(tokenizers/byte.yaml)

@@ -1,0 +1,64 @@
+experiment:
+  name: eo_medium_transformer_char
+  dir: abspath(env(EXPERIMENT_DIR:experiments))
+
+seed: 22
+
+input_tokenizer: file(tokenizers/char.yaml)
+
+model:
+  type: encoder_with_head
+  embedding:
+    embedding_dim: env(DIM:512)
+    dropout: 0.0
+    positional_embeddings: sinusoidal
+    max_length: env(MAX_LENGTH:512)
+  encoder:
+    type: transformer
+    dim: env(DIM:512)
+    num_layers: env(NUM_LAYERS:6)
+    heads: 8
+    ffw_dim: 2048
+    dropout: 0.1
+    with_pos: attention
+  head:
+    type: sequence_classification
+    dim: env(DIM:512)
+    num_layers: 2
+    dropout: 0.1
+    num_classes: 3
+
+train:
+  mixed_precision: true
+  num_epochs: 3
+  eval_interval: 0.25
+  log_interval: 0.025
+  loss:
+    type: sequence_cross_entropy
+    weights: [1, 10, 10]
+    ignore_index: -1
+    num_classes: 3
+  optimizer:
+    type: adamw
+    lr: env(LR:0.0002)
+    weight_decay: 0.001
+  lr_schedule:
+    type: cosine_with_warmup
+  data:
+    strategy: weighted
+    shuffle: true
+    sort: true
+    shuffle_prefetch_factor: 32
+    num_threads: 4
+    batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
+    batch_limit_type: env(BATCH_LIMIT_TYPE:batch_size)
+    pipeline:
+      preprocessing: file(preprocessings/whitespace_noise_char.yaml)
+      labeling:
+        type: whitespace_correction
+      tokenizer: file(tokenizers/char.yaml)
+    sources:
+      - type: file
+        path: abspath(env(DATA_FILE))
+        language: en
+    val: env(VAL_LIMIT:10000)

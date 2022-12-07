@@ -134,3 +134,5 @@ dmypy.json
 # Pycharm
 .idea/
 
+# Slurm
+*.slurm
