@@ -1,5 +1,6 @@
-type: character
-default_prefix_tokens:
+tokenize:
+  type: character
+prefix:
   - "<bos>"
-default_suffix_tokens:
+suffix:
   - "<eos>"

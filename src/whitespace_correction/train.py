@@ -32,9 +32,12 @@ from torch.utils.tensorboard import SummaryWriter
 from whitespace_correction.model import get_model_from_config
 from whitespace_correction.utils import math
 from whitespace_correction.utils.config import (
+    get_metrics_from_config,
     get_optimizer_from_config,
     get_lr_scheduler_from_config,
-    get_loss_from_config, get_data_from_config
+    get_loss_from_config,
+    get_data_from_config,
+    get_tokenizer_from_config
 )
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -136,6 +139,7 @@ def train_one_epoch(
     val_loader: data.DataLoader,
     optimizer: optim.Optimizer,
     loss_fn: nn.Module,
+    metric_cfg: Dict[str, Any],
     summary_writer: Optional[SummaryWriter],
     checkpoint_dir: Optional[str],
     lr_scheduler: Optional[optim.lr_scheduler.SequentialLR],
@@ -165,6 +169,11 @@ def train_one_epoch(
     mean_batch_load = tensorboard.AverageTracker("train_batch_load")
     mean_bsz = tensorboard.AverageTracker("train_batch_size")
     mean_seq_length = tensorboard.AverageTracker("train_sequence_length")
+
+    if metric_cfg is not None:
+        metrics = get_metrics_from_config(metric_cfg, input_tokenizer, output_tokenizer, prefix="train")
+    else:
+        metrics = []
 
     logger.info(f"[rank {info.rank}] [epoch {epoch + 1}] training_steps: {training_steps}")
 
@@ -221,6 +230,7 @@ def train_one_epoch(
                 output_tokenizer=output_tokenizer,
                 val_loader=val_loader,
                 loss_fn=loss_fn,
+                metric_cfg=metric_cfg,
                 summary_writer=summary_writer,
             )
             ckpt_path = os.path.join(checkpoint_dir, "checkpoint_last.pt")
@@ -264,6 +274,11 @@ def train_one_epoch(
 
             mean_seq_length.log_tensorboard(summary_writer, step)
             mean_seq_length.log_info(logger, step)
+
+            for metric in metrics:
+                metric.set_values(batch, outputs)
+                metric.log_tensorboard(summary_writer, step)
+                metric.log_info(logger, step)
 
             summary_writer.add_histogram(
                 "train_batch_size_hist",
@@ -309,6 +324,7 @@ def evaluate(
     output_tokenizer: tokenization.Tokenizer,
     val_loader: DataLoader,
     loss_fn: nn.Module,
+        metric_cfg: Dict[str, Any],
     summary_writer: SummaryWriter
 ) -> float:
     global step
@@ -320,6 +336,10 @@ def evaluate(
 
     model = model.eval()
     loss_fn = loss_fn.eval()
+    if metric_cfg is not None:
+        metrics = get_metrics_from_config(metric_cfg, input_tokenizer, output_tokenizer, prefix="val")
+    else:
+        metrics = []
 
     start = time.perf_counter()
     for batch_num, batch in enumerate(val_loader):
@@ -336,6 +356,12 @@ def evaluate(
         loss = loss + sum(loss_dict.values())
 
         mean_loss.add(loss.detach())
+        if batch_num == 0:
+            for metric in metrics:
+                metric.set_values(batch, outputs)
+                metric.log_tensorboard(summary_writer, step)
+                metric.log_info(logger, step)
+
     end = time.perf_counter()
 
     mean_loss.log_tensorboard(summary_writer, step)
@@ -372,9 +398,9 @@ def train(
     torch.backends.cudnn.benchmark = True
     torch.use_deterministic_algorithms(False)
 
-    input_tokenizer = tokenization.Tokenizer.from_config(cfg["input_tokenizer"])
+    input_tokenizer = get_tokenizer_from_config(cfg["input_tokenizer"])
     if "output_tokenizer" in cfg:
-        output_tokenizer = tokenization.Tokenizer.from_config(cfg["output_tokenizer"])
+        output_tokenizer = get_tokenizer_from_config(cfg["output_tokenizer"])
     else:
         output_tokenizer = None
 
@@ -486,6 +512,7 @@ def train(
             val_loader=val_loader,
             optimizer=optimizer,
             loss_fn=loss_fn,
+            metric_cfg=cfg["train"].get("metrics"),
             summary_writer=summary_writer,
             info=info,
             checkpoint_dir=directories["checkpoints"],

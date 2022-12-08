@@ -38,16 +38,18 @@ train:
   eval_interval: 0.2
   log_interval: 0.01
   loss:
-    type: sequence_cross_entropy
+    type: sequence_focal
     weights: [1, 10, 10]
     ignore_index: -1
-    num_classes: 3
   optimizer:
     type: adamw
     lr: env(LR:0.0001)
     weight_decay: 0.001
   lr_schedule:
     type: cosine_with_warmup
+  metrics:
+    whitespace_correction:
+      max_items: 4
   data:
     strategy: weighted
     shuffle: true

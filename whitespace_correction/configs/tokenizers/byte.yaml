@@ -1,5 +1,6 @@
-type: byte
-default_prefix_tokens:
+tokenize:
+  type: byte
+prefix:
   - "<bos>"
-default_suffix_tokens:
+suffix:
   - "<eos>"

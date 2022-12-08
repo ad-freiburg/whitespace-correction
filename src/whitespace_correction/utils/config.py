@@ -4,10 +4,11 @@ from typing import Dict, Any, List, Tuple, Optional
 import torch
 from torch import optim, nn
 
-from whitespace_correction.utils.loss import SeqLoss
+from whitespace_correction.utils.loss import SeqLoss, FocalLoss
 
-from text_correction_utils import data, io, distributed
+from text_correction_utils import data, io, distributed, tokenization
 from text_correction_utils.modules import lr_scheduler
+from text_correction_utils.tensorboard import TensorboardMetric, WhitespaceCorrectionMetric
 
 
 def get_optimizer_from_config(
@@ -77,8 +78,34 @@ def get_loss_from_config(
         loss = nn.BCELoss(weight=weight)
         return loss
 
+    elif loss_type == "focal":
+        weight = cfg.get("weight", None)
+        loss = FocalLoss(weight, gamma=cfg.get("gamma", 2.), ignore_index=cfg.get("ignore_index", -1))
+        return loss
+
+    elif loss_type == "sequence_focal":
+        weight = cfg.get("weight", None)
+        loss = FocalLoss(weight, gamma=cfg.get("gamma", 2.), ignore_index=cfg.get("ignore_index", -1))
+        return SeqLoss(loss=loss)
+
     else:
         raise ValueError(f"unknown loss type {loss_type}")
+
+
+def _get_tokenizer_config(cfg: Dict[str, Any]) -> tokenization.TokenizerConfig:
+    if "language" in cfg:
+        language = tokenization.LanguageConfig(**cfg.pop("language"))
+    else:
+        language = None
+
+    return tokenization.TokenizerConfig(
+        **cfg,
+        language=language
+    )
+
+
+def get_tokenizer_from_config(cfg: Dict[str, Any]) -> tokenization.Tokenizer:
+    return tokenization.Tokenizer.from_config(_get_tokenizer_config(cfg))
 
 
 def _parse_data_sources(sources: List[Dict[str, Any]]) -> Tuple[List[str], Optional[List[str]]]:
@@ -144,7 +171,7 @@ def get_data_from_config(
     pipeline_config = data.PipelineConfig(
         preprocessing=pipeline.get("preprocessing", []),
         labeling=pipeline["labeling"],
-        tokenizer=pipeline["tokenizer"]
+        tokenizer=_get_tokenizer_config(pipeline["tokenizer"])
     )
     train_loader = data.DataLoader.from_files(
         train_sources,
@@ -182,3 +209,19 @@ def get_data_from_config(
             **cfg
         )
     return train_loader, val_loader
+
+
+def get_metrics_from_config(
+    cfg: Dict[str, Any],
+    input_tokenizer: tokenization.Tokenizer,
+    output_tokenizer: tokenization.Tokenizer,
+    prefix: str
+) -> List[TensorboardMetric]:
+    metrics = []
+    for metric_type, metric_opts in cfg.items():
+        if metric_type == "whitespace_correction":
+            metric = WhitespaceCorrectionMetric(f"{prefix}_whitespace_correction", input_tokenizer, **metric_opts)
+        else:
+            raise ValueError(f"unknown metric type {metric_type}")
+        metrics.append(metric)
+    return metrics
