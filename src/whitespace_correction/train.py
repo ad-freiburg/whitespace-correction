@@ -393,10 +393,11 @@ def train(
     )
     num_batches = 200
     avg_batch_size = tensorboard.AverageTracker("batch_size")
-    logger.info(
-        f"Estimating train loader length from average batch size of first {num_batches} batches "
-        f"and minimum train loader items."
-    )
+    if info.is_main_process:
+        logger.info(
+            f"Estimating train loader length from average batch size of first {num_batches} batches "
+            f"and minimum train loader items."
+        )
     for idx, batch in enumerate(train_loader):
         if idx >= num_batches:
             break
@@ -520,10 +521,8 @@ def initialize() -> distributed.DistributedInfo:
         rank = int(os.environ["SLURM_PROCID"])
         local_rank = int(rank % torch.cuda.device_count())
         local_world_size = torch.cuda.device_count()
-        logger.info(
-            f"Running on Slurm Cluster: master_addr={master_addr}, master_port={master_port}, "
+        msg = f"Running on Slurm Cluster: master_addr={master_addr}, master_port={master_port}, " \
             f"rank={rank}, local_rank={local_rank}, world_size={world_size}, local_world_size={local_world_size}"
-        )
     else:
         assert (
             "RANK" in os.environ
@@ -532,10 +531,11 @@ def initialize() -> distributed.DistributedInfo:
         rank = int(os.environ["RANK"])
         local_rank = int(os.environ["LOCAL_RANK"])
         local_world_size = int(os.environ["LOCAL_WORLD_SIZE"])
-        logger.info(
-            f"Running using torchrun: master_addr={master_addr}, master_port={master_port}, "
+        msg = f"Running using torchrun: master_addr={master_addr}, master_port={master_port}, " \
             f"rank={rank}, local_rank={local_rank}, world_size={world_size}, local_world_size={local_world_size}"
-        )
+
+    if rank == 0:
+        logger.info(msg)
 
     dist.init_process_group(
         backend=dist.Backend.NCCL,
@@ -581,18 +581,14 @@ def main(args: argparse.Namespace, info: distributed.DistributedInfo) -> None:
         else:
             experiment_dir = None
         resuming = False
-        logger.info(f"Starting experiment at {experiment_dir} with config:\n{yaml.dump(cfg)}")
+        if info.is_main_process:
+            logger.info(f"Starting experiment at {experiment_dir} with config:\n{yaml.dump(cfg)}")
     else:
         experiment_dir = args.resume
         cfg = configuration.load_config(os.path.join(experiment_dir, "config.yaml"))
-        if args.overwrite_train_data is not None:
-            logger.info(f"Overriding train data to {args.overwrite_train_data}")
-            cfg["train"]["data"] = args.overwrite_train_data
-        if args.overwrite_val_data is not None:
-            logger.info(f"Overriding val data to {args.overwrite_val_data}")
-            cfg["val"]["data"] = args.overwrite_val_data
         resuming = True
-        logger.info(f"Resuming from {experiment_dir} with config:\n{yaml.dump(cfg)}")
+        if info.is_main_process:
+            logger.info(f"Resuming from {experiment_dir} with config:\n{yaml.dump(cfg)}")
 
     directories = {
         "experiment": experiment_dir,
