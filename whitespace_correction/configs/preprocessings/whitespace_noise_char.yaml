@@ -1,4 +1,6 @@
 - type: clean
+- type: normalize
+  scheme: NFKC
 - type: overwrite
 - type: switch
   configs:

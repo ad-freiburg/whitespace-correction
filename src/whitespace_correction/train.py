@@ -90,7 +90,7 @@ def prepare_info(
 
 
 def prepare_batch(
-    batch: data.Batch,
+    batch: data.ItemBatch,
     model_cfg: Dict[str, Any],
     device: torch.device,
     input_tokenizer: tokenization.Tokenizer,
@@ -100,15 +100,15 @@ def prepare_batch(
     if model_cfg["type"] == "encoder_with_head":
         pad_token_id = input_tokenizer.pad_token_id()
         token_ids = []
-        token_lengths = [len(item.tokenization.token_ids) for item in batch.items]
+        token_lengths = [len(item.tokenization.token_ids) for item in batch]
         max_tokens = max(token_lengths)
         if model_cfg["encoder"]["type"] == "grouping":
-            max_groups = max(len(item.tokenization.info["groups"]) for item in batch.items)
+            max_groups = max(len(item.tokenization.info["groups"]) for item in batch)
         else:
             max_groups = max_tokens
         labels = []
         kwargs = collections.defaultdict(list)
-        for i, item in enumerate(batch.items):
+        for i, item in enumerate(batch):
             token_ids.append(item.tokenization.token_ids + [pad_token_id] * (max_tokens - token_lengths[i]))
             for k, v in prepare_info(item.tokenization.info).items():
                 kwargs[k].append(v)
@@ -230,6 +230,7 @@ def train_one_epoch(
                 output_tokenizer=output_tokenizer,
                 val_loader=val_loader,
                 loss_fn=loss_fn,
+                grad_scaler=mixed_prec_scaler,
                 metric_cfg=metric_cfg,
                 summary_writer=summary_writer,
             )
@@ -258,7 +259,7 @@ def train_one_epoch(
             if lr_scheduler is not None:
                 lr = lr_scheduler.get_last_lr()[0]
                 summary_writer.add_scalar("train_lr", lr, step)
-                logger.info(f"[{step}, {epoch_step}] train_lr: {lr:.8f}")
+                logger.info(f"[step {step}] train_lr: {lr:.8f}")
 
             mean_loss.log_tensorboard(summary_writer, step)
             mean_loss.log_info(logger, step)
@@ -324,7 +325,8 @@ def evaluate(
     output_tokenizer: tokenization.Tokenizer,
     val_loader: DataLoader,
     loss_fn: nn.Module,
-        metric_cfg: Dict[str, Any],
+    grad_scaler: amp.GradScaler,
+    metric_cfg: Dict[str, Any],
     summary_writer: SummaryWriter
 ) -> float:
     global step
@@ -351,9 +353,10 @@ def evaluate(
             output_tokenizer=output_tokenizer
         )
 
-        outputs, loss_dict = model(**inputs)
-        loss = loss_fn(outputs, labels)
-        loss = loss + sum(loss_dict.values())
+        with amp.autocast(enabled=grad_scaler.is_enabled()):
+            outputs, loss_dict = model(**inputs)
+            loss = loss_fn(outputs, labels)
+            loss = loss + sum(loss_dict.values())
 
         mean_loss.add(loss.detach())
         if batch_num == 0:
@@ -414,6 +417,7 @@ def train(
 
     train_loader, val_loader = get_data_from_config(
         cfg["train"]["data"],
+        cfg["input_tokenizer"],
         seed=cfg["seed"],
         info=info
     )

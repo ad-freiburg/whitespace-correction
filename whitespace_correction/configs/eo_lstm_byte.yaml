@@ -1,26 +1,29 @@
 experiment:
-  name: eo_medium_transformer_char
+  name: eo_medium_lstm_byte_focal
   dir: abspath(env(EXPERIMENT_DIR:experiments))
 
 seed: 22
 
-input_tokenizer: file(tokenizers/char.yaml)
+input_tokenizer: file(tokenizers/byte.yaml)
 
 model:
   type: encoder_with_head
   embedding:
     embedding_dim: env(DIM:512)
     dropout: 0.0
-    positional_embeddings: sinusoidal
+    positional_embeddings: none
     max_length: env(MAX_LENGTH:512)
   encoder:
-    type: transformer
-    dim: env(DIM:512)
-    num_layers: env(NUM_LAYERS:6)
-    heads: 8
-    ffw_dim: 2048
-    dropout: 0.1
-    with_pos: attention
+    type: grouping
+    group_first: env(GROUP_FIRST:true)
+    group_aggregation: mean
+    encoder:
+      type: rnn
+      rnn_type: lstm
+      dim: env(DIM:512)
+      num_layers: env(NUM_LAYERS:3)
+      bidirectional: true
+      dropout: 0.1
   head:
     type: sequence_classification
     dim: env(DIM:512)
@@ -31,8 +34,8 @@ model:
 train:
   mixed_precision: true
   num_epochs: 3
-  eval_interval: 0.2
-  log_interval: 0.01
+  eval_interval: eval(1 / env(EVAL_PER_EPOCH:5))
+  log_interval: eval(1 / env(LOG_PER_EPOCH:100)
   loss:
     type: sequence_focal
     weights: [1, 10, 10]
@@ -55,12 +58,12 @@ train:
     shuffle_prefetch_factor: env(BATCH_LIMIT:32) 
     num_threads: 4
     batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
-    batch_limit_type: env(BATCH_LIMIT_TYPE:num_tokens)
+    batch_limit_type: env(BATCH_LIMIT_TYPE:padded_item_size)
     pipeline:
-      preprocessing: file(preprocessings/whitespace_noise_char.yaml)
+      preprocessing: file(preprocessings/whitespace_noise_byte.yaml)
       labeling:
         type: whitespace_correction
-      tokenizer: file(tokenizers/char.yaml)
+      tokenizer: file(tokenizers/byte.yaml)
     sources:
       - type: file
         path: abspath(env(DATA_FILE))

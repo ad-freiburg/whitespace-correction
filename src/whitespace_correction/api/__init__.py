@@ -11,15 +11,11 @@ import torch
 from torch import autocast
 
 from tqdm import tqdm
+from whitespace_correction import model
 
-from whitespace_correction.api.utils import (
-    download_model,
-    get_device_info,
-    match_token_ids_ignoring_space_and_unk,
-    sliding_windows
-)
-from whitespace_correction.model import tokenizer, get_model_from_config
-from whitespace_correction.utils import common, config, inference, io, whitespace_correction
+from whitespace_correction.model import get_model_from_config
+from whitespace_correction.utils import config
+from text_correction_utils import inference, api, logging, configuration, io, data
 
 __all__ = ["ModelInfo", "get_available_models", "WhitespaceCorrector"]
 
@@ -93,7 +89,7 @@ class WhitespaceCorrector:
     def __init__(self,
                  model_dir: str,
                  device: Union[str, int]) -> None:
-        self.logger = common.get_logger("WHITESPACE_CORRECTION")
+        self.logger = logging.get_logger("WHITESPACE_CORRECTION")
 
         if device != "cpu" and not torch.cuda.is_available():
             self.logger.info("could not find a GPU, using CPU as fallback option")
@@ -101,223 +97,58 @@ class WhitespaceCorrector:
 
         self.device = torch.device(device)
 
-        self.cfg = config.Config.from_yaml(os.path.join(model_dir, "config.yaml"))
-        self.logger.debug(f"loaded model config:\n{self.cfg.model}")
-        self.logger.info(f"running {self.cfg.model.name} whitespace corrector on device {get_device_info(self.device)}")
+        self.cfg = configuration.load_config(os.path.join(model_dir, "config.yaml"))
+        assert self.cfg["model"]["type"] == "encoder_with_head", \
+            "this API currently supports only models of type 'encoder_with_head'"
+        self.logger.debug(f"loaded model config:\n{self.cfg['model']}")
+        experiment_name = self.cfg["experiment"]["name"]
+        self.logger.info(f"running {experiment_name} whitespace corrector on device {api.device_info(self.device)}")
 
-        self.model = get_model_from_config(self.cfg.model, self.device)
-        best_checkpoint_path = io.glob_safe(os.path.join(model_dir, "checkpoints", "*-checkpoint-best.pt"))[0]
+        self.model = model.get_model_from_config()
+        best_checkpoint_path = os.path.join(model_dir, "checkpoints", "checkpoint_best.pt")
         best_checkpoint = io.load_checkpoint(best_checkpoint_path)
         self.model.load_state_dict(best_checkpoint["model_state_dict"])
         self.model.eval()
         for param in self.model.parameters():
             param.requires_grad = False
 
-        if (
-                self.cfg.model.type == "transformer_encoder_with_head"
-                and self.cfg.model.encoder.tokenizer.name == "char"
-                and self.cfg.model.head.type == "sequence_classification"
-                and self.cfg.model.head.arguments.get("num_classes", 0) == 3
-        ):
-            # set default inference kwargs
-            self.inference_kwargs = {
-                "temperature": 1.0,
-                "temperature_no_spaces": 1.0,
-                "thresholds_and_default": None,
-                "thresholds_and_default_no_spaces": None
-            }
-            self.pfx = self.cfg.model.encoder.tokenizer.num_prefix_tokens
-            self.sfx = self.cfg.model.encoder.tokenizer.num_suffix_tokens
-
-            # check if the corresponding inference pickle files are in the model dir, if so, load them
-            temperature_path = os.path.join(model_dir, "temperature.pkl")
-            temperature_no_spaces_path = os.path.join(model_dir, "temperature_no_spaces.pkl")
-            thresholds_and_default_path = os.path.join(model_dir, "thresholds_and_default.pkl")
-            thresholds_and_default_no_spaces_path = os.path.join(model_dir, "thresholds_and_default_no_spaces.pkl")
-            if os.path.exists(temperature_path):
-                with open(temperature_path, "rb") as tf:
-                    temp = pickle.load(tf)
-                    self.inference_kwargs["temperature"] = temp
-                self.logger.debug(f"found temperature file: setting temperature to {temp}")
-            if os.path.exists(temperature_no_spaces_path):
-                with open(temperature_no_spaces_path, "rb") as tf:
-                    temp_no_spaces = pickle.load(tf)
-                    self.inference_kwargs["temperature_no_spaces"] = temp_no_spaces
-                self.logger.debug(f"found temperature (no spaces) file: setting temperature to {temp_no_spaces}")
-            if os.path.exists(thresholds_and_default_path):
-                with open(thresholds_and_default_path, "rb") as tf:
-                    thresholds_and_default = pickle.load(tf)
-                    self.inference_kwargs["thresholds_and_default"] = thresholds_and_default
-                self.logger.debug(f"found thresholds_and_default file: setting thresholds and default to "
-                                  f"{thresholds_and_default}")
-            if os.path.exists(thresholds_and_default_no_spaces_path):
-                with open(thresholds_and_default_no_spaces_path, "rb") as tf:
-                    thresholds_and_default_no_spaces = pickle.load(tf)
-                    self.inference_kwargs["thresholds_and_default_no_spaces"] = thresholds_and_default_no_spaces
-                self.logger.debug(f"found thresholds_and_default (no spaces) file: setting thresholds and default to "
-                                  f"{thresholds_and_default_no_spaces}")
-        elif (
-                self.cfg.model.type == "transformer"
-                and self.cfg.model.encoder.tokenizer.name == "char"
-                and self.cfg.model.decoder.tokenizer.name == "char"
-        ):
-            self.char_tokenizer = tokenizer.get_tokenizer_from_config(config.TokenizerConfig("char", 1, 1))
-            self.unk_token_id = self.char_tokenizer.unk_token_id
-            self.ws_token_id = self.char_tokenizer.token_to_id(" ")
-            self.pfx = 1
-            self.sfx = 1
-
-            self.inference_kwargs = {
-                "score_fn": inference.char2char_score_fn(self.char_tokenizer)
-            }
-        else:
-            raise RuntimeError(
-                "model should either be of type transformer_encoder_with_head with a char encoder tokenizer and 3 "
-                "output classes or of type transformer with both a char encoder and decoder tokenizer"
-            )
+        self.input_tokenizer = config.get_tokenizer_from_config(self.cfg["input_tokenizer"])
 
         # use the training max sequence length here, even though some models work with arbitrary long sequences
         # (e.g. LSTM), for better accuracy
-        self.max_length = self.cfg.train.max_seq_length - self.pfx - self.sfx
+        self.max_length = self.cfg["model"]["embedding"]["max_length"] \
+            - self.input_tokenizer.num_prefix_tokens() - self.input_tokenizer.num_suffix_tokens()
         self.window_size = math.ceil(0.75 * self.max_length)
-        self.context_size = math.floor((self.max_length - self.window_size) / 2)
+        self.context_size = (self.max_length - self.window_size) // 2
 
         self._mixed_precision_dtype = torch.float32
-
-    def _merge_inference_results(
-            self,
-            inference_results: List[inference.RawWhitespaceCorrectionInferenceResult],
-            input_str: str
-    ) -> inference.WhitespaceCorrectionInferenceResult:
-        assert (len(inference_results) > 0)
-
-        input_length = len(input_str)
-        if isinstance(inference_results[0], inference.SequenceClassificationInferenceResult):
-            if len(inference_results) == 1:
-                return inference_results[0]
-
-            windows = sliding_windows(input_length, self.window_size)
-            assert len(inference_results) == len(windows)
-
-            merged_predictions = np.full(input_length, fill_value=-1, dtype=int)
-            merged_logits = np.zeros((input_length, len(inference_results[0].logits[0])), dtype=float)
-            for i, (ir, window) in enumerate(zip(inference_results, windows)):
-                start_idx = 0 if i == 0 else self.context_size
-                predictions = ir.predictions[self.pfx:-self.sfx][start_idx:start_idx + self.window_size]
-                logits = ir.logits[self.pfx:-self.sfx][start_idx:start_idx + self.window_size]
-                merged_predictions[window: window + self.window_size] = predictions
-                merged_logits[window: window + self.window_size] = logits
-
-            assert np.all(merged_predictions >= 0)  # make sure everything was successful
-            # add bos eos predictions and logits again (all zeros because they are not used anyway)
-            merged_predictions = list(np.pad(merged_predictions, (self.pfx, self.sfx)))
-            merged_logits = list(np.pad(merged_logits, ((self.pfx, self.sfx), (0, 0))))
-            return inference.SequenceClassificationInferenceResult(merged_predictions, merged_logits)
-
-        else:
-            # we have a list of lists when beam search is used, only take the top beam (first) in this case
-            if isinstance(inference_results[0], list):
-                inference_results = [irs[0] for irs in inference_results]
-            if len(inference_results) == 1:
-                return inference_results[0]
-
-            windows = sliding_windows(input_length, self.window_size)
-            assert len(inference_results) == len(windows)
-
-            merged_token_ids = []
-            merged_log_probabilities = []
-            for i, (ir, window) in enumerate(zip(inference_results, windows)):
-                input_str_left_context = input_str[max(0, window - self.context_size):window]
-                input_str_window = input_str[window: window + self.window_size]
-                input_str_right_context = \
-                    input_str[window + self.window_size:
-                              window + self.window_size + self.context_size]
-                assert (
-                        ir.token_ids[0] == self.char_tokenizer.bos_token_id
-                        and ir.token_ids[-1] == self.char_tokenizer.eos_token_id
-                )
-                from_idx, to_idx = match_token_ids_ignoring_space_and_unk(
-                    ir.token_ids[self.pfx:-self.sfx],
-                    self.char_tokenizer,
-                    input_str_left_context,
-                    input_str_window,
-                    input_str_right_context
-                )
-                merged_token_ids.extend(ir.token_ids[self.pfx:-self.sfx][from_idx: to_idx])
-                merged_log_probabilities.extend(ir.token_log_probabilities[self.pfx:-self.sfx][from_idx: to_idx])
-
-            merged_token_ids = (
-                    [self.char_tokenizer.bos_token_id]
-                    + merged_token_ids
-                    + [self.char_tokenizer.eos_token_id]
-            )
-            merged_log_probabilities = [0.] * self.pfx + merged_log_probabilities + [0.] * self.sfx
-            return inference.SequenceGenerationInferenceResult(merged_token_ids, merged_log_probabilities)
-
-    def _inference_result_to_str(
-            self,
-            inference_result: inference.WhitespaceCorrectionInferenceResult,
-            input_str: str
-    ) -> str:
-        if isinstance(inference_result, inference.SequenceClassificationInferenceResult):
-            return whitespace_correction.repair_whitespace(
-                input_str,
-                inference_result.predictions[self.pfx:-self.sfx]
-            )
-        else:
-            output_chars = []
-            input_str_no_spaces = input_str.replace(" ", "")
-            input_str_no_spaces_ptr = 0
-            for token_id in inference_result.token_ids[self.pfx:-self.sfx]:
-                if token_id == self.ws_token_id:
-                    output_chars.append(" ")
-                else:
-                    char = (
-                        self.char_tokenizer.id_to_token(token_id) if token_id != self.unk_token_id
-                        else input_str_no_spaces[input_str_no_spaces_ptr]
-                    )
-                    output_chars.append(char)
-                    input_str_no_spaces_ptr += 1
-
-            output_str = "".join(output_chars)
-            assert input_str_no_spaces_ptr == len(input_str_no_spaces)
-            assert output_str.replace(" ", "") == input_str_no_spaces
-            return output_str
 
     @torch.inference_mode()
     def _repair_text_raw(
             self,
             inputs: List[str],
+            inputs_are_files: bool,
+            languages: Optional[List[str]],
             batch_size: int = 16,
             sort_by_length: bool = True,
-            show_progress: bool = False
+            show_progress: bool = False,
+            num_threads: int = 0
     ) -> List[inference.WhitespaceCorrectionInferenceResult]:
-        # create batches, if an input sequence is too long, split it into multiple sequences using a sliding window
-        # approach
-        all_inference_results: Dict[int, List[inference.InferenceResult]] = {}  # type: ignore
-        batches = []
-        for input_idx, ipt in enumerate(inputs):
-            length = len(ipt)
-            if length <= self.max_length:
-                batches.append((input_idx, 0, length, 0))
-                all_inference_results[input_idx] = [None]  # type: ignore
-            else:
-                windows = sliding_windows(length, self.window_size)
-                for i, window in enumerate(windows):
-                    batches.append((
-                        input_idx,
-                        max(0, window - self.context_size),
-                        min(length, window + self.window_size + self.context_size),
-                        i
-                    ))
-                all_inference_results[input_idx] = [None] * len(windows)  # type: ignore
-
-        if sort_by_length:
-            batches = sorted(batches, key=lambda e: e[2] - e[1], reverse=True)
-
-        sum_lengths = sum(to_ - from_ for _, from_, to_, _ in batches)
+        if inputs_are_files:
+            loader = data.DataLoader.from_files(
+                inputs,
+                languages=languages,
+                num_threads=num_threads
+            )
+        else:
+            loader = data.DataLoader.from_sequences(
+                inputs,
+                languages=languages,
+                num_threads=num_threads
+            )
+        loader = iter(loader)
         pbar = tqdm(
-            list(range(0, len(batches), batch_size)),
+            loader,
             total=sum_lengths,
             ascii=True,
             leave=False,
@@ -334,17 +165,9 @@ class WhitespaceCorrector:
             batch_length = sum(len(s) for s in batch_sequences)
 
             pbar.set_description(
-                f"[Batch {i + 1}] Repairing tokenization of {len(batch):,} sequences "
-                f"with {batch_length:,} characters in total"
+                f"[Batch {i + 1}] Repairing whitespaces of {len(batch):,} sequences"
             )
 
-            kwargs: Dict[str, Any] = {}
-            if self.cfg.model.type == "encoder_with_head":
-                kwargs["no_spaces"] = [" " not in ipt for ipt in batch]
-            else:
-                kwargs["input_strings"] = [seq.replace(" ", "") for seq in batch_sequences]
-            # add inference keyword arguments to the model
-            kwargs.update(self.inference_kwargs)
             # this is a slight hack for now, because fp32 on cpu throws an error even when enabled=False
             if self.mixed_precision_enabled:
                 with autocast(
@@ -384,8 +207,8 @@ class WhitespaceCorrector:
     ) -> StringInputOutput:
         input_is_string = isinstance(inputs, str)
         assert (
-                input_is_string
-                or (isinstance(inputs, list) and all(isinstance(ipt, str) for ipt in inputs))
+            input_is_string
+            or (isinstance(inputs, list) and all(isinstance(ipt, str) for ipt in inputs))
         ), "input needs to be a string or a non empty list of strings"
 
         if input_is_string:

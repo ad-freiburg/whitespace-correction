@@ -134,6 +134,7 @@ def _parse_data_sources(sources: List[Dict[str, Any]]) -> Tuple[List[str], Optio
 
 def get_data_from_config(
     cfg: Dict[str, Any],
+    input_tokenizer_cfg: Dict[str, Any],
     seed: int,
     info: distributed.DistributedInfo
 ) -> Tuple[data.DataLoader, data.DataLoader]:
@@ -149,36 +150,18 @@ def get_data_from_config(
         raise ValueError("val data must either be an integer or a list of data sources")
 
     train_sources, train_languages = _parse_data_sources(cfg.pop("sources"))
-    strategy_name = cfg.pop("strategy")
-    if strategy_name == "sequential" or strategy_name is None:
-        strategy = data.TextIterationStrategy.Sequential
-    elif strategy_name == "interleaved":
-        strategy = data.TextIterationStrategy.Interleaved
-    elif strategy_name == "weighted":
-        strategy = data.TextIterationStrategy.Weighted
-    else:
-        raise ValueError(f"unknown train strategy {strategy_name}")
-
-    batch_limit_type = cfg.pop("batch_limit_type")
-    if batch_limit_type == "batch_size" or batch_limit_type is None:
-        batch_limit_type = data.BatchLimitType.BatchSize
-    elif batch_limit_type == "num_tokens":
-        batch_limit_type = data.BatchLimitType.NumTokens
-    else:
-        raise ValueError(f"unknown batch limit type {batch_limit_type}")
 
     pipeline = cfg.pop("pipeline")
     pipeline_config = data.PipelineConfig(
         preprocessing=pipeline.get("preprocessing", []),
         labeling=pipeline["labeling"],
-        tokenizer=_get_tokenizer_config(pipeline["tokenizer"])
     )
+    tokenizer_config = _get_tokenizer_config(input_tokenizer_cfg)
     train_loader = data.DataLoader.from_files(
         train_sources,
         pipeline_config,
+        tokenizer_config,
         train_languages,
-        strategy=strategy,
-        batch_limit_type=batch_limit_type,
         seed=seed,
         skip=val_limit if val_limit is not None else 0,
         distributed=(info.rank, info.world_size),
@@ -189,9 +172,8 @@ def get_data_from_config(
         val_loader = data.DataLoader.from_files(
             train_sources,
             pipeline_config,
+            tokenizer_config,
             train_languages,
-            strategy=strategy,
-            batch_limit_type=batch_limit_type,
             seed=seed,
             limit=val_limit,
             distributed=None,
@@ -201,9 +183,8 @@ def get_data_from_config(
         val_loader = data.DataLoader.from_files(
             val_sources,
             pipeline_config,
+            tokenizer_config,
             val_languages,
-            strategy=strategy,
-            batch_limit_type=batch_limit_type,
             seed=seed,
             distributed=None,
             **cfg
