@@ -41,6 +41,8 @@ train:
     type: sequence_focal
     weights: [1, 10, 10]
     ignore_index: -1
+    gamma: 2
+    gamma_schedule: cosine
   optimizer:
     type: adamw
     lr: env(LR:0.0001)

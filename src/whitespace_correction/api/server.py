@@ -11,10 +11,10 @@ import torch
 import torch.backends.cudnn
 from flask import Flask, Response, abort, cli, jsonify, request
 
-import utils.whitespace_correction
+from text_correction_utils.logging import get_logger
+from text_correction_utils import api, metrics
 from whitespace_correction import version
 from whitespace_correction.api import ModelInfo, WhitespaceCorrector, get_available_models
-from whitespace_correction.utils import common, metrics
 
 # disable flask startup message and set flask mode to development
 cli.show_server_banner = lambda *_: None
@@ -24,7 +24,7 @@ server.config["MAX_CONTENT_LENGTH"] = 1 * 1000 * 1000  # 1MB max file size
 server_base_url = os.environ.get("BASE_URL", "")
 flask_logger = logging.getLogger("werkzeug")
 flask_logger.disabled = True
-logger = common.get_logger("WSC_SERVER")
+logger = get_logger("WSC_SERVER")
 
 
 class WhitespaceCorrectors:
@@ -38,7 +38,7 @@ class WhitespaceCorrectors:
 
     def init(self, models: List[str], timeout: float, precision: str) -> None:
         num_devices = torch.cuda.device_count()
-        logger.info(f"Found {num_devices} GPUs")
+        logger.info(f"found {num_devices} GPUs")
         self.timeout = timeout
         self.precision = precision
         for i, model in enumerate(models):
@@ -111,8 +111,8 @@ def get_models() -> Response:
 def get_info() -> Response:
     response = jsonify(
         {
-            "gpu": [utils.get_gpu_info(i) for i in range(torch.cuda.device_count())],
-            "cpu": utils.get_cpu_info(),
+            "gpu": [api.gpu_info(i) for i in range(torch.cuda.device_count())],
+            "cpu": api.cpu_info(),
             "timeout": ws_correctors.timeout,
             "precision": ws_correctors.precision,
             "version": version.__version__
@@ -125,40 +125,30 @@ def get_info() -> Response:
 def evaluate() -> Response:
     start = time.perf_counter()
     ipt = request.form.get("input")
-    opt = request.form.get("output")
+    pred = request.form.get("predictions")
     gt = request.form.get("groundtruth")
-    if ipt is None or opt is None or gt is None:
+    if ipt is None or pred is None or gt is None:
         return abort(Response(
-            "request missing one or more of the required fields 'input', 'output', and 'groundtruth'", status=400
+            "request is missing one or more of the required fields 'input', 'predictions', and 'groundtruth'", status=400
         ))
 
-    # clean and split, remove empty final line if it exists
-    ipt = [utils.whitespace_correction.clean_sequence(i) for i in ipt.split("\n")]
-    opt = [utils.whitespace_correction.clean_sequence(o) for o in opt.split("\n")]
-    gt = [utils.whitespace_correction.clean_sequence(g) for g in gt.split("\n")]
-    if len(ipt) > 1 and ipt[-1] == "":
-        ipt = ipt[:-1]
-    if len(opt) > 1 and opt[-1] == "":
-        opt = opt[:-1]
-    if len(gt) > 1 and gt[-1] == "":
-        gt = gt[:-1]
-
-    if not len(ipt) == len(opt) and len(opt) == len(gt):
+    if not len(ipt) == len(pred) and len(pred) == len(gt):
         return abort(Response(
-            f"expected the same number of inputs, outputs, and groundtruths, but got {(len(ipt), len(opt), len(gt))}",
+            f"expected the same number of inputs, predictions, and groundtruths, but got {(len(ipt), len(pred), len(gt))}",
             status=400
         ))
 
     try:
-        _, _, _, f1, prec, rec = metrics.whitespace_correction_f1_prec_rec(opt, gt, ipt)
-    except AssertionError:
+        f1, prec, rec = metrics.text_correction_f1(ipt, pred, gt)
+    except Exception:
         return abort(Response(
-            "evaluation failed, make sure all inputs, outputs, and groundtruths only differ in whitespaces",
+            "evaluation failed, make sure all inputs, predictions, and groundtruths only differ in whitespaces",
             status=400
         ))
 
     end = time.perf_counter()
-    logger.info(f"Evaluating text with {sum(len(i) for i in ipt)} chars took {end - start:.2f}s")
+    logger.info(
+        f"evaluating text with {sum(len(i.encode('utf8')) for i in ipt) / 1000:.2f} kilobytes took {end - start:.2f}s")
 
     return jsonify({
         "precision": prec,
@@ -174,13 +164,13 @@ def correct_text() -> Response:
     if text is None:
         return abort(Response("request missing 'text' field in form data", status=400))
     text = [line.strip() for line in text.splitlines()]
-    num_characters = sum(len(line) for line in text)
+    num_bytes = sum(len(line.encode("utf8")) for line in text)
     model = request.args.get("model", ws_correctors.default_model)
     with ws_correctors.get_corrector(model) as ws_cor:
         start_correction = time.perf_counter()
         if isinstance(ws_cor, tuple):
             message, status_code = ws_cor
-            logger.warning(f"Correcting text aborted with status {status_code}: {message}")
+            logger.warning(f"correcting text aborted with status {status_code}: {message}")
             return abort(Response(message, status=status_code))
         else:
             corrected = ws_cor.correct_text(text)
@@ -188,7 +178,7 @@ def correct_text() -> Response:
     end = time.perf_counter()
     runtime = end - start
     raw_runtime = end_correction - start_correction
-    logger.info(f"Correcting text with {num_characters} characters using model {model} took "
+    logger.info(f"correcting text with {num_bytes / 1000:.2f} kilobytes using model {model} took "
                 f"{runtime:.2f}s ({raw_runtime:.2f}s raw)")
     response = jsonify(
         {
@@ -196,8 +186,8 @@ def correct_text() -> Response:
             "runtime": {
                 "total": runtime,
                 "raw": raw_runtime,
-                "total_cps": num_characters / runtime,
-                "raw_cps": num_characters / raw_runtime
+                "total_bps": num_bytes / runtime,
+                "raw_bps": num_bytes / raw_runtime
             }
         }
     )
@@ -208,7 +198,6 @@ def run_flask_server(config_path: str) -> None:
     if not os.path.exists(config_path):
         raise RuntimeError(f"server config file {config_path} does not exist")
 
-    torch.backends.cudnn.benchmark = True
     torch.set_num_threads(len(os.sched_getaffinity(0)))
     torch.use_deterministic_algorithms(False)
 

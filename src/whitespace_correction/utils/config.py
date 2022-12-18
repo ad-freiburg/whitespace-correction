@@ -1,5 +1,6 @@
 import copy
-from typing import Dict, Any, List, Tuple, Optional
+import math
+from typing import Dict, Any, List, Tuple, Optional, Callable
 
 import torch
 from torch import optim, nn
@@ -55,15 +56,27 @@ def get_lr_scheduler_from_config(
         raise ValueError(f"unknown lr scheduler type {lr_type}")
 
 
+def _loss_schedule(training_steps: int, schedule_type: str) -> Callable[[int], float]:
+    if schedule_type == "linear":
+        return lambda step: max(0.0, 1.0 - step / training_steps)
+    elif schedule_type == "cosine":
+        def _cosine(step: int):
+            frac = min(1.0, step / training_steps)
+            return 0.5 * (1.0 + math.cos(math.pi * frac))
+        return _cosine
+    else:
+        raise ValueError(f"unknown schedule type {schedule_type}")
+
+
 def get_loss_from_config(
-    cfg: Dict[str, Any]
+    training_steps: int,
+    cfg: Dict[str, Any],
 ) -> nn.Module:
     cfg = copy.deepcopy(cfg)
     loss_type = cfg.pop("type")
     if loss_type == "sequence_cross_entropy":
-        weight = cfg.get("weights", None)
-        weight = torch.tensor(weight, dtype=torch.float) if weight is not None else None
-        loss = nn.CrossEntropyLoss(ignore_index=cfg.get("ignore_index", -1), weight=weight)
+        cfg["type"] = "cross_entropy"
+        loss = get_loss_from_config(training_steps, cfg)
         return SeqLoss(loss=loss)
 
     elif loss_type == "cross_entropy":
@@ -80,19 +93,28 @@ def get_loss_from_config(
 
     elif loss_type == "focal":
         weight = cfg.get("weight", None)
-        loss = FocalLoss(weight, gamma=cfg.get("gamma", 2.), ignore_index=cfg.get("ignore_index", -1))
+        if "gamma_schedule" in cfg:
+            schedule = _loss_schedule(training_steps, cfg["gamma_schedule"])
+        else:
+            schedule = None
+        loss = FocalLoss(
+            weight,
+            gamma=cfg.get("gamma", 2.),
+            ignore_index=cfg.get("ignore_index", -1),
+            gamma_schedule=schedule
+        )
         return loss
 
     elif loss_type == "sequence_focal":
-        weight = cfg.get("weight", None)
-        loss = FocalLoss(weight, gamma=cfg.get("gamma", 2.), ignore_index=cfg.get("ignore_index", -1))
+        cfg["type"] = "focal"
+        loss = get_loss_from_config(training_steps, cfg)
         return SeqLoss(loss=loss)
 
     else:
         raise ValueError(f"unknown loss type {loss_type}")
 
 
-def _get_tokenizer_config(cfg: Dict[str, Any]) -> tokenization.TokenizerConfig:
+def get_tokenizer_config(cfg: Dict[str, Any]) -> tokenization.TokenizerConfig:
     if "language" in cfg:
         language = tokenization.LanguageConfig(**cfg.pop("language"))
     else:
@@ -105,7 +127,7 @@ def _get_tokenizer_config(cfg: Dict[str, Any]) -> tokenization.TokenizerConfig:
 
 
 def get_tokenizer_from_config(cfg: Dict[str, Any]) -> tokenization.Tokenizer:
-    return tokenization.Tokenizer.from_config(_get_tokenizer_config(cfg))
+    return tokenization.Tokenizer.from_config(get_tokenizer_config(cfg))
 
 
 def _parse_data_sources(sources: List[Dict[str, Any]]) -> Tuple[List[str], Optional[List[str]]]:
@@ -156,7 +178,7 @@ def get_data_from_config(
         preprocessing=pipeline.get("preprocessing", []),
         labeling=pipeline["labeling"],
     )
-    tokenizer_config = _get_tokenizer_config(input_tokenizer_cfg)
+    tokenizer_config = get_tokenizer_config(input_tokenizer_cfg)
     train_loader = data.DataLoader.from_files(
         train_sources,
         pipeline_config,

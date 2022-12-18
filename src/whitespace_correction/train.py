@@ -218,8 +218,11 @@ def train_one_epoch(
                     mean_seq_length.add(len(item.tokenization.token_ids))
                 mean_batch_load.add((end_batch - start_batch) * 1000)
 
-        if lr_scheduler is not None:
-            lr_scheduler.step()
+            if lr_scheduler is not None:
+                lr_scheduler.step()
+
+            if hasattr(loss_fn, "step"):
+                loss_fn.step(step)
 
         if (epoch_step % eval_interval == 0 or batch is None) and info.is_main_process:
             val_loss = evaluate(
@@ -413,8 +416,6 @@ def train(
         output_tokenizer=output_tokenizer,
     ).to(info.device)
 
-    loss_fn = get_loss_from_config(cfg["train"]["loss"])
-
     train_loader, val_loader = get_data_from_config(
         cfg["train"]["data"],
         cfg["input_tokenizer"],
@@ -452,6 +453,7 @@ def train(
     else:
         lr_scheduler = None
 
+    loss_fn = get_loss_from_config(training_steps, cfg["train"]["loss"])
     mixed_prec_scaler = amp.GradScaler(enabled=cfg["train"].get("mixed_precision", False))
 
     if info.is_main_process:

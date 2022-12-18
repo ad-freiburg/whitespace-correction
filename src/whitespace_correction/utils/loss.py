@@ -1,21 +1,22 @@
-from typing import List, Optional
+from typing import List, Optional, Callable
 import einops
 import torch
 from torch import nn
 
-# copied and modified from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
-
 
 class FocalLoss(nn.Module):
+    # copied and modified from https://github.com/AdeelH/pytorch-multi-class-focal-loss/blob/master/focal_loss.py
     def __init__(
         self,
         alpha: Optional[List[float]],
         gamma: float,
         reduction: str = "mean",
-        ignore_index: int = -100
+        ignore_index: int = -100,
+        gamma_schedule: Optional[Callable[[int], float]] = None
     ):
         super().__init__()
         self.alpha = alpha
+        self.init_gamma = gamma
         self.gamma = gamma
         self.reduction = reduction
         self.ignore_index = ignore_index
@@ -24,6 +25,7 @@ class FocalLoss(nn.Module):
             reduction="none",
             ignore_index=ignore_index
         )
+        self.gamma_schedule = gamma_schedule
 
     def forward(self, outputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         assert outputs.ndim == 2 and labels.ndim == 1
@@ -49,6 +51,10 @@ class FocalLoss(nn.Module):
             loss = loss.sum()
         return loss
 
+    def step(self, step: int):
+        if self.gamma_schedule is not None:
+            self.gamma = self.init_gamma * self.gamma_schedule(step)
+
 
 class SeqLoss(nn.Module):
     """
@@ -65,3 +71,7 @@ class SeqLoss(nn.Module):
         # labels are expected to be of shape [B, S], reshape to [B * S]
         labels = einops.rearrange(labels, "b s -> (b s)")
         return self.loss(outputs, labels)
+
+    def step(self, step: int):
+        if hasattr(self.loss, "step"):
+            self.loss.step(step)
