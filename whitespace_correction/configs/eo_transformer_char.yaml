@@ -1,5 +1,5 @@
 experiment:
-  name: eo_medium_transformer_char
+  name: eo_medium_transformer_char_focal
   dir: abspath(env(EXPERIMENT_DIR:experiments))
 
 seed: 22
@@ -31,12 +31,14 @@ model:
 train:
   mixed_precision: true
   num_epochs: 3
-  eval_interval: 0.2
-  log_interval: 0.01
+  eval_interval: eval(1 / env(EVAL_PER_EPOCH:5))
+  log_interval: eval(1 / env(LOG_PER_EPOCH:100))
   loss:
     type: sequence_focal
     weights: [1, 10, 10]
     ignore_index: -1
+    gamma: 2
+    gamma_schedule: cosine
   optimizer:
     type: adamw
     lr: env(LR:0.0001)
@@ -52,10 +54,10 @@ train:
     shuffle: true
     sort: true
     buffer_size: eval(env(BATCH_LIMIT:32) * env(BATCH_LIMIT:32))
-    shuffle_prefetch_factor: env(BATCH_LIMIT:32) 
+    prefetch_factor: env(BATCH_LIMIT:32) 
     num_threads: 4
     batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
-    batch_limit_type: env(BATCH_LIMIT_TYPE:num_tokens)
+    batch_limit_type: env(BATCH_LIMIT_TYPE:padded_item_size)
     pipeline:
       preprocessing: file(preprocessings/whitespace_noise_char.yaml)
       labeling:

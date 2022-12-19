@@ -16,7 +16,7 @@ __all__ = ["ModelInfo", "WhitespaceCorrector"]
 ModelInfo = collections.namedtuple("ModelInfo", ["name", "description"])
 
 
-class WhitespaceCorrector(corrector.Corrector):
+class WhitespaceCorrector(corrector.TextCorrector):
     task = "whitespace correction"
 
     @classmethod

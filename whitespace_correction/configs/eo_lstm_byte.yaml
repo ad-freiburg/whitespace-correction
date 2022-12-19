@@ -11,7 +11,7 @@ model:
   embedding:
     embedding_dim: env(DIM:512)
     dropout: 0.0
-    positional_embeddings: none
+    positional_embeddings: sinusoidal
     max_length: env(MAX_LENGTH:512)
   encoder:
     type: grouping
@@ -22,7 +22,6 @@ model:
       rnn_type: lstm
       dim: env(DIM:512)
       num_layers: env(NUM_LAYERS:3)
-      bidirectional: true
       dropout: 0.1
   head:
     type: sequence_classification
@@ -35,11 +34,13 @@ train:
   mixed_precision: true
   num_epochs: 3
   eval_interval: eval(1 / env(EVAL_PER_EPOCH:5))
-  log_interval: eval(1 / env(LOG_PER_EPOCH:100)
+  log_interval: eval(1 / env(LOG_PER_EPOCH:100))
   loss:
     type: sequence_focal
     weights: [1, 10, 10]
     ignore_index: -1
+    gamma: 2
+    gamma_schedule: cosine
   optimizer:
     type: adamw
     lr: env(LR:0.0001)
@@ -55,7 +56,7 @@ train:
     shuffle: true
     sort: true
     buffer_size: eval(env(BATCH_LIMIT:32) * env(BATCH_LIMIT:32))
-    shuffle_prefetch_factor: env(BATCH_LIMIT:32) 
+    prefetch_factor: env(BATCH_LIMIT:32) 
     num_threads: 4
     batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
     batch_limit_type: env(BATCH_LIMIT_TYPE:padded_item_size)

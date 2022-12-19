@@ -20,7 +20,7 @@ def generate_report(
         file_path: Optional[str] = None
 ) -> Optional[str]:
     input_size = len(inputs)
-    input_size_chars = sum(len(ipt) for ipt in inputs)
+    input_size_bytes = sum(len(ipt.encode("utf8")) for ipt in inputs)
 
     if precision == torch.float16:
         precision_str = "fp16"
@@ -38,7 +38,7 @@ def generate_report(
             "Input size",
             "Runtime in seconds",
             "Seq/s",
-            "kChar/s",
+            "kB/s",
             "MiB GPU memory",
             "Mio. parameters",
             "Precision",
@@ -50,10 +50,10 @@ def generate_report(
             [
                 task,
                 model_name,
-                f"{input_size:,} sequences, {input_size_chars:,} chars",
+                f"{input_size:,} seq, {input_size_bytes / 1000:,.2f} kB",
                 f"{runtime:.1f}",
                 f"{input_size / runtime:.1f}",
-                f"{input_size_chars / (runtime * 1000):.1f}",
+                f"{input_size_bytes / (runtime * 1000):.1f}",
                 f"{torch.cuda.max_memory_reserved(device) // (1024 ** 2):,}" if device.type == "cuda" else "-",
                 f"{utils.num_parameters(model)['total'] / (1000 ** 2):,.1f}",
                 precision_str,
