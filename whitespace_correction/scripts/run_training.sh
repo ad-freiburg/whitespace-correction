@@ -60,10 +60,11 @@ else
   train_cmd="$code/train.py --resume $resume"
 fi
 
+time_out=${TIMEOUT:-23.75h}
 if [[ $is_local == true || $force_local == true ]]; then
   echo "Starting local training with cmd $train_cmd"
-  python3 -W ignore $train_cmd --local
+  timeout -s SIGINT $time_out python3 -W ignore $train_cmd --local
 else
   echo "Starting slurm distributed training with cmd $train_cmd"
-  srun python3 -W ignore $train_cmd
+  srun timeout -s SIGINT $time_out -W ignore $train_cmd
 fi
