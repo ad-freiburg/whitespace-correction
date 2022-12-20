@@ -25,7 +25,7 @@ echo "Script is located at $script_dir, workspace is $workspace, code is at $cod
 
 if [[ $is_local == true || $force_local == true ]]; then
   echo "Running locally (force_local=$force_local)"
-  master_addr="127.0.0.1"
+  master_addr="localhost"
   master_port=$(python3 -c "import random; print(random.Random().randint(10000, 60000))")
   world_size=$(python3 -c "import torch; print(torch.cuda.device_count())")
 else
@@ -62,13 +62,7 @@ fi
 
 if [[ $is_local == true || $force_local == true ]]; then
   echo "Starting local training with cmd $train_cmd"
-  num_cores=$(python3 -c "import os; print(len(os.sched_getaffinity(0)))")
-  export OMP_NUM_THREADS=$(( $num_cores / $world_size ))
-  torchrun \
-    --nnodes=1 \
-    --nproc_per_node=$world_size \
-    --start_method=spawn \
-    $train_cmd
+  python3 -W ignore $train_cmd --local
 else
   echo "Starting slurm distributed training with cmd $train_cmd"
   srun python3 -W ignore $train_cmd

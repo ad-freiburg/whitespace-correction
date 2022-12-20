@@ -26,6 +26,7 @@ class FocalLoss(nn.Module):
             ignore_index=ignore_index
         )
         self.gamma_schedule = gamma_schedule
+        self.register_buffer("_step", torch.tensor(0, dtype=torch.long))
 
     def forward(self, outputs: torch.Tensor, labels: torch.Tensor) -> torch.Tensor:
         assert outputs.ndim == 2 and labels.ndim == 1
@@ -38,22 +39,23 @@ class FocalLoss(nn.Module):
         log_p = torch.log_softmax(outputs, dim=-1)
         ce = self.nll_loss(log_p, labels)
 
-        log_pt = log_p[torch.arange(len(outputs), device=outputs.device), labels]
-
-        pt = log_pt.exp()
-        focal_term = (1 - pt) ** self.gamma
-
-        loss = focal_term * ce
+        if self.training:
+            log_pt = log_p[torch.arange(len(outputs), device=outputs.device), labels]
+            pt = log_pt.exp()
+            gamma = self.init_gamma
+            if self.gamma_schedule is not None:
+                gamma *= self.gamma_schedule(self._step.item())
+            focal_term = (1 - pt) ** gamma
+            ce = focal_term * ce
 
         if self.reduction == "mean":
-            loss = loss.mean()
+            ce = ce.mean()
         elif self.reduction == "sum":
-            loss = loss.sum()
-        return loss
+            ce = ce.sum()
+        return ce
 
-    def step(self, step: int):
-        if self.gamma_schedule is not None:
-            self.gamma = self.init_gamma * self.gamma_schedule(step)
+    def step(self):
+        self._step += 1
 
 
 class SeqLoss(nn.Module):
@@ -72,6 +74,6 @@ class SeqLoss(nn.Module):
         labels = einops.rearrange(labels, "b s -> (b s)")
         return self.loss(outputs, labels)
 
-    def step(self, step: int):
+    def step(self):
         if hasattr(self.loss, "step"):
-            self.loss.step(step)
+            self.loss.step()
