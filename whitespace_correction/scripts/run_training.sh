@@ -4,9 +4,10 @@
 #SBATCH --ntasks-per-node=2
 #SBATCH --nodes=4
 #SBATCH --job-name=training
+#SBATCH --open-mode=append
 #SBATCH --output=train_%x_%j.slurm
 #SBATCH --mail-user=swalter@cs.uni-freiburg.de
-#SBATCH --mail-type=END,FAIL
+#SBATCH --mail-type=BEGIN,END,FAIL,REQUEUE
 #SBATCH --time=24:00:00
 
 force_local=${FORCE_LOCAL:-false}
@@ -37,34 +38,25 @@ else
   echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
 fi
 
-export EXPERIMENT_DIR=${EXPERIMENT_DIR:-$workspace/experiments}
-
 # for pytorch distributed
 export MASTER_ADDR=$master_addr
 export MASTER_PORT=$master_port
 export WORLD_SIZE=$world_size
 
-config=${CONFIG:-""}
-resume=${RESUME:-""}
+config=${CONFIG?"env var CONFIG not found"}
+experiment=${EXPERIMENT?"env var EXPERIMENT not found"}
 
-if [[ ($config == "" && $resume == "") || ($config != "" && $resume != "") ]]; then
-  echo "Specify either CONFIG or RESUME, but not both or neither"
-  exit 1
-fi
-
-if [[ $config != "" ]]; then
-  echo "Starting training with config $config"
-  train_cmd="$code/train.py --config $config"
-else
-  echo "Resuming training from experiment $resume"
-  train_cmd="$code/train.py --resume $resume"
-fi
+train_cmd="python3 -W ignore $code/train.py --config $config --experiment $experiment"
 
 time_out=${TIMEOUT:-23.75h}
 if [[ $is_local == true || $force_local == true ]]; then
   echo "Starting local training with cmd $train_cmd"
-  timeout -s SIGINT $time_out python3 -W ignore $train_cmd --local
+  timeout -s SIGINT $time_out $train_cmd --local
 else
   echo "Starting slurm distributed training with cmd $train_cmd"
-  srun timeout -s SIGINT $time_out -W ignore $train_cmd
+  srun timeout -s SIGINT $time_out $train_cmd
+fi
+
+if [[ $? == 124 ]]; then
+    scontrol requeue $SLURM_JOB_ID
 fi

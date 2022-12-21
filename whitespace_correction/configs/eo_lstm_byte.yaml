@@ -1,6 +1,5 @@
 experiment:
-  name: eo_medium_lstm_byte_focal
-  dir: abspath(env(EXPERIMENT_DIR:experiments))
+  name: env(EXPERIMENT_NAME)
 
 seed: 22
 

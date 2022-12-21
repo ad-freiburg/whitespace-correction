@@ -1,7 +1,5 @@
 import argparse
 import random
-import signal
-import sys
 import collections
 import os
 import re
@@ -48,9 +46,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
-    train_group = parser.add_mutually_exclusive_group(required=True)
-    train_group.add_argument("-c", "--config", type=str, default=None)
-    train_group.add_argument("-r", "--resume", type=str, default=None)
+    parser.add_argument("-e", "--experiment", type=str, required=True)
     parser.add_argument("--local", action="store_true")
     return parser.parse_args()
 
@@ -161,6 +157,8 @@ def train_one_epoch(
         eval_interval = math.constrain(int(eval_interval * training_steps), 1, training_steps)
     if isinstance(log_interval, float):
         log_interval = math.constrain(int(log_interval * training_steps), 1, training_steps)
+    if info.is_main_process:
+        logger.info(f"evaluating every {eval_interval:,} steps, logging every {log_interval:,} steps")
 
     model = model.train().to(info.device)
     loss_fn = loss_fn.train().to(info.device)
@@ -568,15 +566,13 @@ def de_initialize() -> None:
     dist.destroy_process_group()
 
 
-def setup_experiment_dir(cfg: Dict[str, Any]) -> str:
-    experiment_name = re.sub(r"\s", "_", cfg["experiment"]["name"])
-    experiment_subdir = f"{experiment_name}@{datetime.today().strftime('%Y-%m-%d-%H_%M_%S')}"
-    experiment_dir = os.path.join(cfg["experiment"]["dir"], experiment_subdir)
-    os.makedirs(experiment_dir)
+def setup_experiment_dir(path: str, cfg: Dict[str, Any]):
+    os.makedirs(path, exist_ok=True)
     # save copy of config file to experiment directory
-    with open(os.path.join(experiment_dir, "config.yaml"), "w", encoding="utf8") as f:
+    with open(os.path.join(path, "config.yaml"), "w", encoding="utf8") as f:
         f.write(yaml.dump(cfg))
-    return experiment_dir
+    os.makedirs(os.path.join(path, "checkpoints"), exist_ok=True)
+    os.makedirs(os.path.join(path, "tensorboard"), exist_ok=True)
 
 
 def train_local_distributed(
@@ -658,56 +654,51 @@ def initialize_slurm() -> distributed.DistributedInfo:
 
 
 def train_slurm(args: argparse.Namespace, info: distributed.DistributedInfo) -> None:
-    if args.config is not None:
+    resuming = os.path.exists(args.experiment) and os.path.exists(
+        os.path.join(args.experiment, "checkpoints", "checkpoint_last.pt")
+    )
+    if not resuming:
         cfg = configuration.load_config(args.config)
         if info.is_main_process:
-            experiment_dir = setup_experiment_dir(cfg)
-        else:
-            experiment_dir = None
-        resuming = False
-        if info.is_main_process:
-            logger.info(f"Starting experiment at {experiment_dir} with config:\n{yaml.dump(cfg)}")
+            setup_experiment_dir(args.experiment, cfg)
+            logger.info(f"Starting experiment at {args.experiment} with config:\n{yaml.dump(cfg)}")
     else:
-        experiment_dir = args.resume
-        cfg = configuration.load_config(os.path.join(experiment_dir, "config.yaml"))
-        resuming = True
+        cfg = configuration.load_config(os.path.join(args.experiment, "config.yaml"))
         if info.is_main_process:
-            logger.info(f"Resuming from {experiment_dir} with config:\n{yaml.dump(cfg)}")
+            logger.info(f"Resuming from {args.experiment} with config:\n{yaml.dump(cfg)}")
 
     directories = {
-        "experiment": experiment_dir,
-        "checkpoints": os.path.join(experiment_dir, "checkpoints") if experiment_dir is not None else None,
-        "tensorboard": os.path.join(experiment_dir, "tensorboard") if experiment_dir is not None else None
+        "experiment": args.experiment,
+        "checkpoints": os.path.join(args.experiment, "checkpoints"),
+        "tensorboard": os.path.join(args.experiment, "tensorboard")
     }
-    if info.is_main_process:
-        os.makedirs(directories["checkpoints"], exist_ok=True)
-        os.makedirs(directories["tensorboard"], exist_ok=True)
 
     train(info, cfg, directories, resuming)
 
 
 if __name__ == "__main__":
     args = parse_args()
+    resuming = os.path.exists(args.experiment) and os.path.exists(
+        os.path.join(args.experiment, "checkpoints", "checkpoint_last.pt")
+    )
     if args.local:
+        logger = logging.get_logger("LOCAL_INITIALIZATION")
         num_gpus = torch.cuda.device_count()
         assert num_gpus > 0, "need at least one GPU for local training"
         # start local distributed training
         port = int(os.environ.get("MASTER_PORT", random.randint(10000, 60000)))
-        if args.config is not None:
+        if not resuming:
             cfg = configuration.load_config(args.config)
-            resuming = False
-            experiment_dir = setup_experiment_dir(cfg)
+            setup_experiment_dir(args.experiment, cfg)
+            logger.info(f"Starting experiment at {args.experiment} with config:\n{yaml.dump(cfg)}")
         else:
-            experiment_dir = args.resume
-            resuming = True
-            cfg = configuration.load_config(os.path.join(experiment_dir, "config.yaml"))
+            cfg = configuration.load_config(os.path.join(args.experiment, "config.yaml"))
+            logger.info(f"Resuming from {args.experiment} with config:\n{yaml.dump(cfg)}")
         directories = {
-            "experiment": experiment_dir,
-            "checkpoints": os.path.join(experiment_dir, "checkpoints"),
-            "tensorboard": os.path.join(experiment_dir, "tensorboard")
+            "experiment": args.experiment,
+            "checkpoints": os.path.join(args.experiment, "checkpoints"),
+            "tensorboard": os.path.join(args.experiment, "tensorboard")
         }
-        os.makedirs(directories["checkpoints"], exist_ok=True)
-        os.makedirs(directories["tensorboard"], exist_ok=True)
         p_ctx = mp.spawn(
             fn=train_local_distributed,
             nprocs=num_gpus,
