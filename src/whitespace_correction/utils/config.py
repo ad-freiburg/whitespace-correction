@@ -174,7 +174,7 @@ def get_data_from_config(
     train_sources, train_languages = _parse_data_sources(cfg.pop("sources"))
 
     pipeline = cfg.pop("pipeline")
-    pipeline_config = data.PipelineConfig(
+    pipeline_config = data.PreprocessingPipelineConfig(
         preprocessing=pipeline.get("preprocessing", []),
         labeling=pipeline["labeling"],
     )
