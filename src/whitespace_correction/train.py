@@ -47,6 +47,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--experiment", type=str, required=True)
+    parser.add_argument("-c", "--config", type=str)
     parser.add_argument("--local", action="store_true")
     return parser.parse_args()
 
@@ -658,6 +659,7 @@ def train_slurm(args: argparse.Namespace, info: distributed.DistributedInfo) -> 
         os.path.join(args.experiment, "checkpoints", "checkpoint_last.pt")
     )
     if not resuming:
+        assert args.config is not None, "specify config if not resuming an existing experiment"
         cfg = configuration.load_config(args.config)
         if info.is_main_process:
             setup_experiment_dir(args.experiment, cfg)
@@ -688,6 +690,7 @@ if __name__ == "__main__":
         # start local distributed training
         port = int(os.environ.get("MASTER_PORT", random.randint(10000, 60000)))
         if not resuming:
+            assert args.config is not None, "specify config if not resuming an existing experiment"
             cfg = configuration.load_config(args.config)
             setup_experiment_dir(args.experiment, cfg)
             logger.info(f"Starting experiment at {args.experiment} with config:\n{yaml.dump(cfg)}")
