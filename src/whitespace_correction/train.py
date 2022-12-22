@@ -55,6 +55,7 @@ def parse_args() -> argparse.Namespace:
 # globals used by training and/or evaluation function
 step: int = 0  # overall step across epochs
 epoch_step: int = 0
+epoch_items: int = 0
 epoch: int = 0
 best_val_loss: float = float("inf")
 logger = logging.get_logger("TRAIN")
@@ -145,11 +146,14 @@ def train_one_epoch(
     checkpoint_dir: Optional[str],
     lr_scheduler: Optional[optim.lr_scheduler.SequentialLR],
     mixed_prec_scaler: amp.GradScaler,
+    mixed_prec_dtype: torch.dtype,
+    clip_grad_norm: Optional[float],
     eval_interval: Union[int, float],
     log_interval: Union[int, float],
 ) -> None:
     global step
     global epoch_step
+    global epoch_items
     global best_val_loss
     global logger
     global epoch
@@ -185,6 +189,7 @@ def train_one_epoch(
         batch = next(train_loader, None)
         end_batch = time.perf_counter()
         if batch is None:
+            logger.info(f"[rank {info.rank}] finished epoch {epoch + 1}")
             break
 
         inputs, labels = prepare_batch(
@@ -198,13 +203,16 @@ def train_one_epoch(
         optimizer.zero_grad()
 
         start_forward = time.perf_counter()
-        with amp.autocast(enabled=mixed_prec_scaler.is_enabled()):
+        with amp.autocast(enabled=mixed_prec_scaler.is_enabled(), dtype=mixed_prec_dtype):
             outputs, loss_dict = model(**inputs)
             end_forward = time.perf_counter()
             loss = loss_fn(outputs, labels)
             loss = loss + sum(loss_dict.values())
 
         mixed_prec_scaler.scale(loss).backward()
+        if clip_grad_norm is not None:
+            mixed_prec_scaler.unscale_(optimizer)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), clip_grad_norm)
         mixed_prec_scaler.step(optimizer)
         mixed_prec_scaler.update()
 
@@ -213,9 +221,9 @@ def train_one_epoch(
             mean_forward_pass.add((end_forward - start_forward) * 1000)
             # approximation since we expect every rank to roughly
             # have the same batch size
-            batch_size = labels.shape[0] * info.world_size
+            batch_size = len(batch) * info.world_size
             mean_bsz.add(batch_size)
-            for item in batch.items:
+            for item in batch:
                 mean_seq_length.add(len(item.tokenization.token_ids))
             mean_batch_load.add((end_batch - start_batch) * 1000)
 
@@ -227,6 +235,7 @@ def train_one_epoch(
 
         step += 1
         epoch_step += 1
+        epoch_items += len(batch)
         if epoch_step % eval_interval == 0 and info.is_main_process:
             evaluate_and_checkpoint(
                 model=model,
@@ -237,6 +246,7 @@ def train_one_epoch(
                 val_loader=val_loader,
                 loss_fn=loss_fn,
                 grad_scaler=mixed_prec_scaler,
+                mixed_prec_dtype=mixed_prec_dtype,
                 metric_cfg=metric_cfg,
                 summary_writer=summary_writer,
                 checkpoint_dir=checkpoint_dir,
@@ -312,6 +322,7 @@ def evaluate_and_checkpoint(
     val_loader: DataLoader,
     loss_fn: nn.Module,
     grad_scaler: amp.GradScaler,
+    mixed_prec_dtype: torch.dtype,
     metric_cfg: Dict[str, Any],
     summary_writer: SummaryWriter,
     optimizer: optim.Optimizer,
@@ -320,6 +331,7 @@ def evaluate_and_checkpoint(
 ):
     global step
     global epoch_step
+    global epoch_items
     global logger
     global best_val_loss
 
@@ -344,7 +356,7 @@ def evaluate_and_checkpoint(
             output_tokenizer=output_tokenizer
         )
 
-        with amp.autocast(enabled=grad_scaler.is_enabled()):
+        with amp.autocast(enabled=grad_scaler.is_enabled(), dtype=mixed_prec_dtype):
             outputs, loss_dict = model(**inputs)
             loss = loss_fn(outputs, labels)
             loss = loss + sum(loss_dict.values())
@@ -374,6 +386,7 @@ def evaluate_and_checkpoint(
         step=step,
         epoch=epoch,
         epoch_step=epoch_step,
+        epoch_items=epoch_items,
         val_loss=val_loss
     )
 
@@ -393,6 +406,7 @@ def train(
     global epoch
     global step
     global epoch_step
+    global epoch_items
     global best_val_loss
 
     if info.is_main_process:
@@ -460,6 +474,13 @@ def train(
 
     loss_fn = get_loss_from_config(training_steps, cfg["train"]["loss"])
     mixed_prec_scaler = amp.GradScaler(enabled=cfg["train"].get("mixed_precision", False))
+    mixed_precision_dtype = cfg["train"].get("mixed_precision_dtype", "fp16")
+    if mixed_precision_dtype == "fp16":
+        mixed_prec_dtype = torch.float16
+    elif mixed_precision_dtype == "bfp16":
+        mixed_prec_dtype = torch.bfloat16
+    else:
+        raise ValueError(f"unknown mixed precision type {mixed_precision_dtype}, must fp16 or bfp16")
 
     if info.is_main_process:
         summary_writer = SummaryWriter(log_dir=directories["tensorboard"])
@@ -493,12 +514,13 @@ def train(
         epoch = checkpoint["epoch"]
         best_val_loss = checkpoint["val_loss"]
         epoch_step = checkpoint["epoch_step"]
+        epoch_items = checkpoint["epoch_items"]
 
         if info.is_main_process:
             logger.info(
                 f"Resuming training from checkpoint {last_checkpoint}\n"
-                f"Starting at epoch {epoch + 1} at global step {step} with a best validation loss of {best_val_loss}\n"
-                f"Need to fast forward {epoch_step} steps"
+                f"Starting at epoch {epoch + 1} at global step {step:,} (epoch step {epoch_step}) with a best validation loss of {best_val_loss:.6f}\n"
+                f"Fast forwarding {epoch_items:,} items."
             )
 
     ddp_model = DDP(model)
@@ -506,15 +528,7 @@ def train(
     try:
         while epoch < cfg["train"]["num_epochs"]:
             train_loader.set_epoch(epoch)
-
-            train_loader = iter(train_loader)
-            if epoch_step > 0:
-                start = time.perf_counter()
-                for _ in range(epoch_step):
-                    _ = next(train_loader)
-                end = time.perf_counter()
-                if info.is_main_process:
-                    logger.info(f"forwarding {epoch_step} batches took {end - start:.2f}s")
+            train_loader.set_fast_forward(epoch_items)
 
             train_one_epoch(
                 model=ddp_model,
@@ -532,12 +546,15 @@ def train(
                 checkpoint_dir=directories["checkpoints"],
                 lr_scheduler=lr_scheduler,
                 mixed_prec_scaler=mixed_prec_scaler,
+                mixed_prec_dtype=mixed_prec_dtype,
+                clip_grad_norm=cfg["train"].get("clip_grad_norm"),
                 eval_interval=cfg["train"]["eval_interval"],
                 log_interval=cfg["train"]["log_interval"]
             )
 
             epoch += 1
             epoch_step = 0
+            epoch_items = 0
     except KeyboardInterrupt:
         if info.is_main_process:
             logger.info("got termination signal, evaluating and saving on main process before exiting")
@@ -553,6 +570,7 @@ def train(
                 val_loader=val_loader,
                 loss_fn=loss_fn,
                 grad_scaler=mixed_prec_scaler,
+                mixed_prec_dtype=mixed_prec_dtype,
                 metric_cfg=cfg["train"].get("metrics"),
                 summary_writer=summary_writer,
                 optimizer=optimizer,

@@ -45,7 +45,7 @@ class FocalLoss(nn.Module):
             gamma = self.init_gamma
             if self.gamma_schedule is not None:
                 gamma *= self.gamma_schedule(self._step.item())
-            focal_term = (1 - pt) ** gamma
+            focal_term = torch.pow((1 - pt).clamp(0, 1), gamma)
             ce = focal_term * ce
 
         if self.reduction == "mean":

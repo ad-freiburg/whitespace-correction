@@ -93,7 +93,8 @@ class WhitespaceCorrector(corrector.TextCorrector):
             device: Union[str, int]
     ) -> None:
         super().__init__(model_dir, device)
-
+        precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
+        self.set_precision(precision)
         assert (
             self.cfg["model"]["type"] == "encoder_with_head"
             and self.cfg["model"]["head"]["type"] == "sequence_classification"
@@ -123,18 +124,10 @@ class WhitespaceCorrector(corrector.TextCorrector):
             raise ValueError("the input tokenizer must be of type 'char' or 'byte' for whitespace correction")
 
         # this config should be also used during training whitespace correciton models
-        inference_pipeline_cfg = data.PipelineConfig(
-            preprocessing=[
-                {"type": "clean"},
-                {"type": "overwrite"},
-                {"type": "normalize", "scheme": "NFKC"}
-            ],
-            labeling=None
-        )
         return {
-            "pipeline_config": inference_pipeline_cfg,
             "tokenizer_config": input_tokenizer_cfg,
-            "window_config": window_cfg
+            "window_config": window_cfg,
+            "normalization": "NFKC"
         }
 
     @staticmethod
@@ -151,12 +144,12 @@ class WhitespaceCorrector(corrector.TextCorrector):
         if self.cfg["model"]["type"] == "encoder_with_head":
             pad_token_id = self.input_tokenizer.pad_token_id()
             token_ids = []
-            token_lengths = [len(item.item.tokenization.token_ids) for item in batch]
+            token_lengths = [len(item.tokenization.token_ids) for item in batch]
             max_tokens = max(token_lengths)
             kwargs = collections.defaultdict(list)
             for i, item in enumerate(batch):
-                token_ids.append(item.item.tokenization.token_ids + [pad_token_id] * (max_tokens - token_lengths[i]))
-                for k, v in self._prepare_info(item.item.tokenization.info).items():
+                token_ids.append(item.tokenization.token_ids + [pad_token_id] * (max_tokens - token_lengths[i]))
+                for k, v in self._prepare_info(item.tokenization.info).items():
                     kwargs[k].append(v)
             inputs = {
                 "token_ids": torch.as_tensor(token_ids, dtype=torch.long, device=self.device),
@@ -168,16 +161,18 @@ class WhitespaceCorrector(corrector.TextCorrector):
             raise ValueError(f"unsupported model type {self.cfg['model']['type']}")
 
     def _process_results(self, items: List[data.InferenceItem], outputs: List[Any]) -> str:
-        assert len(items) == 1, "merging not yet implemented"
-        predictions = outputs[0]
-        predictions = torch.argmax(predictions, dim=-1)
-        item = items[0]
-        (_, window_start, window_end, _) = item.window
-        corrected = whitespace.repair(
-            item.item.data.original,
-            predictions[self._pfx + window_start:self._pfx + window_end].tolist()
+        assert len(items) > 0 and len(items) == len(outputs)
+        merged_predictions = []
+        for item, output in zip(items, outputs):
+            context_start, window_start, window_end, _ = item.window
+            window_start -= context_start
+            window_end -= context_start
+            prediction = torch.argmax(output[self._pfx + window_start:self._pfx + window_end], dim=-1)
+            merged_predictions.extend(prediction.tolist())
+        return whitespace.repair(
+            items[0].data.original,
+            merged_predictions
         )
-        return corrected
 
     def correct_text(
             self,
@@ -243,3 +238,12 @@ class WhitespaceCorrector(corrector.TextCorrector):
                     of.write(output + "\n")
         else:
             return outputs
+
+    def set_precision(self, precision: str) -> None:
+        training_precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
+        if precision != "fp32" and precision != training_precision:
+            self.logger.warning(
+                f"this model was trained with {training_precision} precision, "
+                "inference with {precision} might give unexpected results"
+            )
+        return super().set_precision(precision)
