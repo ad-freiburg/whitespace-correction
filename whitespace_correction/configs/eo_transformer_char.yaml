@@ -56,7 +56,7 @@ train:
     sort: true
     buffer_size: eval(env(BATCH_LIMIT:32) * env(BATCH_LIMIT:32))
     prefetch_factor: env(BATCH_LIMIT:32) 
-    num_threads: 4
+    num_threads: env(THREADS:4)
     batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
     batch_limit_type: env(BATCH_LIMIT_TYPE:padded_item_size)
     pipeline:
