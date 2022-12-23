@@ -1,5 +1,7 @@
 import copy
+import os
 import math
+import shutil
 from typing import Dict, Any, List, Tuple, Optional, Callable
 
 import torch
@@ -130,6 +132,16 @@ def get_tokenizer_from_config(cfg: Dict[str, Any]) -> tokenization.Tokenizer:
     return tokenization.Tokenizer.from_config(get_tokenizer_config(cfg))
 
 
+def _copy_file_to_tmp_dir(path: str, dir: str) -> str:
+    _, file_name = os.path.split(path)
+    # make temp path unique by hashing the full input path, because only
+    # using the file name could cause issues if some files are named the same
+    os.makedirs(dir, exist_ok=True)
+    temp_path = os.path.join(dir, f"{hash(path) % 10 ** 8}_{file_name}")
+    shutil.copy2(path, temp_path)
+    return temp_path
+
+
 def _parse_data_sources(sources: List[Dict[str, Any]]) -> Tuple[List[str], Optional[List[str]]]:
     source_paths = []
     source_languages = []
@@ -138,16 +150,25 @@ def _parse_data_sources(sources: List[Dict[str, Any]]) -> Tuple[List[str], Optio
         if src_type == "file":
             lang = src.get("language")
             path = src["path"]
+            assert os.path.isfile(path), f"{path} is not a file"
+            temp_dir = src.get("temp_dir")
+            if temp_dir is not None:
+                path = _copy_file_to_tmp_dir(path, temp_dir)
             source_paths.append(path)
             source_languages.append(lang)
         elif src_type == "file_glob":
             lang = src.get("language")
+            temp_dir = src.get("temp_dir")
             for path in io.glob_safe(src["glob"]):
+                assert os.path.isfile(path), f"{path} is not a file"
+                if temp_dir is not None:
+                    path = _copy_file_to_tmp_dir(path, temp_dir)
                 source_paths.append(path)
                 source_languages.append(lang)
         else:
             raise ValueError(f"unknown source type {src_type}")
 
+    assert len(source_paths) > 0, "got no data sources"
     if all(lang is None for lang in source_languages):
         return source_paths, None
     else:

@@ -47,7 +47,7 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("-e", "--experiment", type=str, required=True)
-    parser.add_argument("-c", "--config", type=str)
+    parser.add_argument("-c", "--config", type=str, default=None)
     parser.add_argument("--local", action="store_true")
     return parser.parse_args()
 
@@ -184,9 +184,10 @@ def train_one_epoch(
 
     logger.info(f"[rank {info.rank}] [epoch {epoch + 1}] training_steps: {training_steps}")
 
+    train_iter = iter(train_loader)
     while True:
         start_batch = time.perf_counter()
-        batch = next(train_loader, None)
+        batch = next(train_iter, None)
         end_batch = time.perf_counter()
         if batch is None:
             logger.info(f"[rank {info.rank}] finished epoch {epoch + 1}")
@@ -585,13 +586,15 @@ def de_initialize() -> None:
     dist.destroy_process_group()
 
 
-def setup_experiment_dir(path: str, cfg: Dict[str, Any]):
-    os.makedirs(path, exist_ok=True)
-    # save copy of config file to experiment directory
-    with open(os.path.join(path, "config.yaml"), "w", encoding="utf8") as f:
+def setup_experiment(dir: str, config_path: str, cfg: Dict[str, Any]):
+    os.makedirs(dir, exist_ok=True)
+    # save the resolved config to the experiment directory
+    with open(os.path.join(dir, "config.yaml"), "w", encoding="utf8") as f:
         f.write(yaml.dump(cfg))
-    os.makedirs(os.path.join(path, "checkpoints"), exist_ok=True)
-    os.makedirs(os.path.join(path, "tensorboard"), exist_ok=True)
+    # make a backup of the raw, unresolved config in the experiment directory
+    shutil.copy2(config_path, os.path.join(dir, "config_raw.yaml"))
+    os.makedirs(os.path.join(dir, "checkpoints"), exist_ok=True)
+    os.makedirs(os.path.join(dir, "tensorboard"), exist_ok=True)
 
 
 def train_local_distributed(
@@ -680,10 +683,10 @@ def train_slurm(args: argparse.Namespace, info: distributed.DistributedInfo) -> 
         assert args.config is not None, "specify config if not resuming an existing experiment"
         cfg = configuration.load_config(args.config)
         if info.is_main_process:
-            setup_experiment_dir(args.experiment, cfg)
+            setup_experiment(args.experiment, args.config, cfg)
             logger.info(f"Starting experiment at {args.experiment} with config:\n{yaml.dump(cfg)}")
     else:
-        cfg = configuration.load_config(os.path.join(args.experiment, "config.yaml"))
+        cfg = configuration.load_config(os.path.join(args.experiment, "config_raw.yaml"))
         if info.is_main_process:
             logger.info(f"Resuming from {args.experiment} with config:\n{yaml.dump(cfg)}")
 
@@ -708,12 +711,12 @@ if __name__ == "__main__":
         # start local distributed training
         port = int(os.environ.get("MASTER_PORT", random.randint(10000, 60000)))
         if not resuming:
-            assert args.config is not None, "specify config if not resuming an existing experiment"
             cfg = configuration.load_config(args.config)
-            setup_experiment_dir(args.experiment, cfg)
+            assert args.config is not None, "specify config if not resuming an existing experiment"
+            setup_experiment(args.experiment, args.config, cfg)
             logger.info(f"Starting experiment at {args.experiment} with config:\n{yaml.dump(cfg)}")
         else:
-            cfg = configuration.load_config(os.path.join(args.experiment, "config.yaml"))
+            cfg = configuration.load_config(os.path.join(args.experiment, "config_raw.yaml"))
             logger.info(f"Resuming from {args.experiment} with config:\n{yaml.dump(cfg)}")
         directories = {
             "experiment": args.experiment,
