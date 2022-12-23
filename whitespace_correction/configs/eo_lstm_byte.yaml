@@ -60,7 +60,8 @@ train:
     prefetch_factor: env(BATCH_LIMIT:32) 
     num_threads: env(THREADS:4)
     batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
-    batch_limit_type: env(BATCH_LIMIT_TYPE:padded_item_size)
+    batch_limit_type: padded_item_size
+    batch_buffer_size: env(BATCH_LIMIT:32)
     pipeline:
       preprocessing: file(preprocessings/whitespace_noise_byte.yaml)
       labeling:
