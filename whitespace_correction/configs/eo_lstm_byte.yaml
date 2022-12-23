@@ -10,7 +10,7 @@ model:
   embedding:
     embedding_dim: env(DIM:512)
     dropout: 0.0
-    positional_embeddings: sinusoidal
+    positional_embeddings: none
     max_length: env(MAX_LENGTH:512)
   encoder:
     type: grouping
