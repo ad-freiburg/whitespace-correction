@@ -116,12 +116,14 @@ def prepare_batch(
                 kwargs[k].append(v)
 
             labels.append(prepare_label(item.label, input_tokenizer, output_tokenizer, max_groups))
-
+        
+        # input_tensor = torch.tensor(token_ids, dtype=torch.long).pin_memory().to(device, non_blocking=True)
         inputs = {
             "token_ids": torch.as_tensor(token_ids, dtype=torch.long, device=device),
             "lengths": token_lengths,
             **kwargs
         }
+        # labels = torch.tensor(labels, dtype=torch.long).pin_memory().to(device, non_blocking=True)
         labels = torch.as_tensor(labels, dtype=torch.long, device=device)
 
     else:
@@ -174,6 +176,7 @@ def train_one_epoch(
     mean_loss = tensorboard.AverageTracker("train_loss", fmt=".2e")
     mean_forward_pass = tensorboard.AverageTracker("train_forward_pass")
     mean_batch_load = tensorboard.AverageTracker("train_batch_load")
+    mean_batch_preparation = tensorboard.AverageTracker("train_batch_preparation")
     mean_bsz = tensorboard.AverageTracker("train_batch_size")
     mean_seq_length = tensorboard.AverageTracker("train_sequence_length")
 
@@ -193,6 +196,7 @@ def train_one_epoch(
             logger.info(f"[rank {info.rank}] finished epoch {epoch + 1}")
             break
 
+        start_preparation = time.perf_counter()
         inputs, labels = prepare_batch(
             batch=batch,
             model_cfg=model_cfg,
@@ -200,15 +204,16 @@ def train_one_epoch(
             input_tokenizer=input_tokenizer,
             output_tokenizer=output_tokenizer
         )
+        end_preparation = time.perf_counter()
 
         optimizer.zero_grad()
 
         start_forward = time.perf_counter()
         with amp.autocast(enabled=mixed_prec_scaler.is_enabled(), dtype=mixed_prec_dtype):
             outputs, loss_dict = model(**inputs)
-            end_forward = time.perf_counter()
             loss = loss_fn(outputs, labels)
             loss = loss + sum(loss_dict.values())
+        end_forward = time.perf_counter()
 
         mixed_prec_scaler.scale(loss).backward()
         if clip_grad_norm is not None:
@@ -227,6 +232,7 @@ def train_one_epoch(
             for item in batch:
                 mean_seq_length.add(len(item.tokenization.token_ids))
             mean_batch_load.add((end_batch - start_batch) * 1000)
+            mean_batch_preparation.add((end_preparation - start_preparation) * 1000)
 
         if lr_scheduler is not None:
             lr_scheduler.step()
@@ -274,6 +280,9 @@ def train_one_epoch(
 
             mean_batch_load.log_tensorboard(summary_writer, step)
             mean_batch_load.log_info(logger, step)
+
+            mean_batch_preparation.log_tensorboard(summary_writer, step)
+            mean_batch_preparation.log_info(logger, step)
 
             mean_seq_length.log_tensorboard(summary_writer, step)
             mean_seq_length.log_info(logger, step)
