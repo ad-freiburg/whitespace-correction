@@ -4,9 +4,11 @@ import collections
 import os
 import re
 import shutil
+import tempfile
 import time
 from datetime import datetime
 from typing import Dict, Optional, Tuple, Union, Any
+import zipfile
 
 import torch
 import yaml
@@ -40,6 +42,7 @@ from whitespace_correction.utils.config import (
     get_data_from_config,
     get_tokenizer_from_config
 )
+from whitespace_correction.utils.git import git_branch, git_commit
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
@@ -116,7 +119,7 @@ def prepare_batch(
                 kwargs[k].append(v)
 
             labels.append(prepare_label(item.label, input_tokenizer, output_tokenizer, max_groups))
-        
+
         # input_tensor = torch.tensor(token_ids, dtype=torch.long).pin_memory().to(device, non_blocking=True)
         inputs = {
             "token_ids": torch.as_tensor(token_ids, dtype=torch.long, device=device),
@@ -596,14 +599,33 @@ def de_initialize() -> None:
 
 
 def setup_experiment(dir: str, config_path: str, cfg: Dict[str, Any]):
+    config_name = os.path.split(config_path)[-1]
     os.makedirs(dir, exist_ok=True)
     # save the resolved config to the experiment directory
-    with open(os.path.join(dir, "config.yaml"), "w", encoding="utf8") as f:
+    with open(os.path.join(dir, config_name), "w", encoding="utf8") as f:
         f.write(yaml.dump(cfg))
-    # make a backup of the raw, unresolved config in the experiment directory
-    shutil.copy2(config_path, os.path.join(dir, "config_raw.yaml"))
+    # make a backup of the raw, unresolved configs in the config directory as zip
+    with zipfile.ZipFile(os.path.join(dir, "configs.zip"), "w", zipfile.ZIP_DEFLATED) as zf:
+        root = os.path.dirname(config_path)
+        for config_dir, _, files in os.walk(root):
+            for file in files:
+                print(file)
+                rel_sub_dir = os.path.relpath(config_dir, root)
+                if not file.endswith(".yaml"):
+                    continue
+                zf.write(os.path.join(config_dir, file), os.path.join(rel_sub_dir, file))
+    with open(os.path.join(dir, "info.yaml"), "w", encoding="utf8") as f:
+        f.write(yaml.dump({"config_name": config_name, "git": {"branch": git_branch(), "commit": git_commit()}}))
     os.makedirs(os.path.join(dir, "checkpoints"), exist_ok=True)
     os.makedirs(os.path.join(dir, "tensorboard"), exist_ok=True)
+
+
+def config_from_experiment(dir: str) -> Dict[str, Any]:
+    info = configuration.load_config(os.path.join(dir, "info.yaml"))
+    with zipfile.ZipFile(os.path.join(dir, "configs.zip"), "r", zipfile.ZIP_DEFLATED) as inz:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            inz.extractall(tmp_dir)
+            return configuration.load_config(os.path.join(tmp_dir, info["config_name"]))
 
 
 def train_local_distributed(
@@ -651,13 +673,12 @@ def initialize_slurm() -> distributed.DistributedInfo:
         "MASTER_ADDR" in os.environ
         and "MASTER_PORT" in os.environ
         and "WORLD_SIZE" in os.environ
-    ), f"could not find at least one of MASTER_ADDR, MASTER_PORT and WORLD_SIZE env variables"
+    ), "could not find at least one of MASTER_ADDR, MASTER_PORT and WORLD_SIZE env variables"
     master_addr = os.environ["MASTER_ADDR"]
     master_port = int(os.environ["MASTER_PORT"])
     world_size = int(os.environ["WORLD_SIZE"])
 
-    assert "SLURM_PROCID" in os.environ, \
-        f"distributed training across multiple nodes is only supported with SLURM"
+    assert "SLURM_PROCID" in os.environ, "distributed training across multiple nodes is only supported with SLURM"
     rank = int(os.environ["SLURM_PROCID"])
     local_rank = int(rank % torch.cuda.device_count())
     local_world_size = torch.cuda.device_count()
@@ -695,7 +716,7 @@ def train_slurm(args: argparse.Namespace, info: distributed.DistributedInfo) -> 
             setup_experiment(args.experiment, args.config, cfg)
             logger.info(f"Starting experiment at {args.experiment} with config:\n{yaml.dump(cfg)}")
     else:
-        cfg = configuration.load_config(os.path.join(args.experiment, "config_raw.yaml"))
+        cfg = config_from_experiment(args.experiment)
         if info.is_main_process:
             logger.info(f"Resuming from {args.experiment} with config:\n{yaml.dump(cfg)}")
 
@@ -725,7 +746,7 @@ if __name__ == "__main__":
             setup_experiment(args.experiment, args.config, cfg)
             logger.info(f"Starting experiment at {args.experiment} with config:\n{yaml.dump(cfg)}")
         else:
-            cfg = configuration.load_config(os.path.join(args.experiment, "config_raw.yaml"))
+            cfg = config_from_experiment(args.experiment)
             logger.info(f"Resuming from {args.experiment} with config:\n{yaml.dump(cfg)}")
         directories = {
             "experiment": args.experiment,
