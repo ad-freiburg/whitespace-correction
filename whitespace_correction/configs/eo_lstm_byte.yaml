@@ -14,7 +14,7 @@ model:
     max_length: env(MAX_LENGTH:512)
   encoder:
     type: grouping
-    group_first: env(GROUP_FIRST:false)
+    group_first: env(GROUP_FIRST:true)
     group_aggregation: mean
     encoder:
       type: rnn

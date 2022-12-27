@@ -118,7 +118,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         context_size = (max_length - window_size) // 2
         if self.cfg["input_tokenizer"]["tokenize"]["type"] == "byte":
             window_cfg = {"type": "byte", "max_bytes": max_length, "context_bytes": context_size}
-        elif self.cfg["input_tokenizer"]["tokenize"]["type"] == "char":
+        elif self.cfg["input_tokenizer"]["tokenize"]["type"] == "character":
             window_cfg = {"type": "character", "max_chars": max_length, "context_chars": context_size}
         else:
             raise ValueError("the input tokenizer must be of type 'char' or 'byte' for whitespace correction")
@@ -127,7 +127,6 @@ class WhitespaceCorrector(corrector.TextCorrector):
         return {
             "tokenizer_config": input_tokenizer_cfg,
             "window_config": window_cfg,
-            "normalization": "NFKC"
         }
 
     @staticmethod
