@@ -11,6 +11,6 @@ def git_branch() -> str:
 
 def git_commit() -> str:
     return subprocess.check_output(
-        ["git", "rev-parse", "--short", "HEAD"],
+        ["git", "rev-parse", "HEAD"],
         cwd=Path(__file__).resolve().parent.parent.parent
     ).strip().decode("utf8")
