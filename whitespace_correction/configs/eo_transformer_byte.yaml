@@ -8,6 +8,7 @@ input_tokenizer: file(tokenizers/byte.yaml)
 model:
   type: encoder_with_head
   embedding:
+    type: standard
     embedding_dim: env(DIM:512)
     dropout: 0.0
     positional_embeddings: sinusoidal

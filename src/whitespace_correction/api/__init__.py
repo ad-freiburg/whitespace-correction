@@ -6,9 +6,9 @@ import torch
 from torch import nn
 from torch import autocast
 
-from whitespace_correction.model import get_model_from_config
-from whitespace_correction.utils import config
-from text_correction_utils import data, whitespace
+from whitespace_correction.model import model_from_config
+
+from text_correction_utils import data, whitespace, tokenization
 from text_correction_utils.api import corrector, device_info
 
 __all__ = ["ModelInfo", "WhitespaceCorrector"]
@@ -72,8 +72,8 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
     @classmethod
     def _model_from_config(cls, cfg: Dict[str, Any]) -> nn.Module:
-        input_tokenizer = config.get_tokenizer_from_config(cfg["input_tokenizer"])
-        return get_model_from_config(
+        input_tokenizer = tokenization.tokenizer_from_config(cfg["input_tokenizer"])
+        return model_from_config(
             cfg["model"],
             input_tokenizer,
             None
