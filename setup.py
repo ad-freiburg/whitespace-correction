@@ -20,7 +20,7 @@ setup(
     },
     author="Sebastian Walter",
     author_email="swalter@tf.uni-freiburg.de",
-    python_requires=">=3.6",
+    python_requires=">=3.8",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
     scripts=[
@@ -40,9 +40,5 @@ setup(
         "train": [
             "tensorboard>=2.8.0",
         ],
-        "inference": [
-            "onnxruntime-gpu==1.11.1",
-            "tensorrt==8.2.5.1"
-        ]
     }
 )
