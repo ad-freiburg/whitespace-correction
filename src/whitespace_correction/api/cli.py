@@ -1,14 +1,15 @@
-import argparse
 from typing import Any, Iterator
 
-from text_correction_utils.api import TextCorrectionCli
+from text_correction_utils.api.cli import TextCorrectionCli
 
 from whitespace_correction import version
+from whitespace_correction.api.corrector import WhitespaceCorrector
+from whitespace_correction.api.server import WhitespaceCorrectionServer
 
 
 class WhitespaceCorrectionCli(TextCorrectionCli):
-    def __init__(self, args: argparse.Namespace):
-        super().__init__(args)
+    text_corrector_cls = WhitespaceCorrector
+    text_correction_server_cls = WhitespaceCorrectionServer
 
     def version(self) -> str:
         return version.__version__
@@ -25,3 +26,11 @@ class WhitespaceCorrectionCli(TextCorrectionCli):
 
     def correct_file(self, s: str) -> Any:
         pass
+
+
+def main():
+    parser = WhitespaceCorrectionCli.parser(
+        "Whitespace correction",
+        "Correct missing or spurious whitespaces in text"
+    )
+    WhitespaceCorrectionCli(parser.parse_args()).run()

@@ -19,13 +19,13 @@ setup(
         "Github": "https://github.com/ad-freiburg/whitespace-correction",
     },
     author="Sebastian Walter",
-    author_email="swalter@tf.uni-freiburg.de",
+    author_email="swalter@cs.uni-freiburg.de",
     python_requires=">=3.8",
     package_dir={"": "src"},
     packages=find_packages(where="src"),
-    scripts=[
-        "bin/wsc"
-    ],
+    entry_points={
+        "console_scripts": ["wsc=whitespace_correction.api.cli:main"],
+    },
     install_requires=[
         "torch>=1.8.0",
         "einops>=0.3.0",
@@ -34,7 +34,6 @@ setup(
         "tqdm>=4.49.0",
         "requests>=2.27.0",
         "flask>=2.0.0",
-        "editdistance>=0.5.0"
     ],
     extras_require={
         "train": [

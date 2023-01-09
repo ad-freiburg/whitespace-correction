@@ -9,7 +9,20 @@ from torch import autocast
 from whitespace_correction.model import model_from_config
 
 from text_correction_utils import data, whitespace, tokenization
-from text_correction_utils.api import corrector, device_info, ModelInfo
+from text_correction_utils.api.corrector import ModelInfo
+from text_correction_utils.api import corrector
+from text_correction_utils.api.utils import device_info
+
+_BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
+    "EMNLP_whitespace_correction_transformer_BHW_2022.materials"
+_NAME_TO_ZIP = {
+    "eo_large": "eo_large.zip",
+    "eo_small": "eo_small.zip",
+    "eo_medium": "eo_medium.zip",
+    "ed_large": "ed_large.zip",
+    "ed_medium": "ed_medium.zip",
+    "ed_small": "ed_small.zip",
+}
 
 
 class WhitespaceCorrector(corrector.TextCorrector):
@@ -21,7 +34,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
             ModelInfo(
                 name="eo_large",
                 description="Best overall model, use this for text that might have OCR or spelling errors.",
-                tags=[]
+                tags=["best"]
             ),
             ModelInfo(
                 name="eo_medium",
@@ -35,7 +48,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
                 description="Smallest and fastest, but also the least accurate model. "
                 "Use this when you want to repair text with few whitespace errors and "
                 "little to no OCR or spelling errors fast.",
-                tags=[]
+                tags=["fastest"]
             ),
             ModelInfo(
                 name="ed_large",
@@ -56,17 +69,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
     @classmethod
     def _model_url(cls, model: str) -> str:
-        _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
-            "EMNLP_whitespace_correction_transformer_BHW_2022.materials"
-        NAME_TO_URL = {
-            "eo_large": f"{_BASE_URL}/eo_large.zip",
-            "eo_small": f"{_BASE_URL}/eo_small.zip",
-            "eo_medium": f"{_BASE_URL}/eo_medium.zip",
-            "ed_large": f"{_BASE_URL}/ed_large.zip",
-            "ed_medium": f"{_BASE_URL}/ed_medium.zip",
-            "ed_small": f"{_BASE_URL}/ed_small.zip",
-        }
-        return NAME_TO_URL[model]
+        return f"{_BASE_URL}/{_NAME_TO_ZIP[model]}"
 
     @property
     def name(self) -> str:
