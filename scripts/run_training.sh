@@ -1,12 +1,10 @@
 #!/bin/bash
-#SBATCH --partition=alldlc_gpu-rtx2080
-#SBATCH --gres=gpu:2
-#SBATCH --ntasks-per-node=2
-#SBATCH --nodes=4
+#SBATCH --gres=gpu:1
+#SBATCH --ntasks-per-node=1
+#SBATCH --nodes=1
 #SBATCH --job-name=training
 #SBATCH --open-mode=append
 #SBATCH --output=train_%x_%j.slurm
-#SBATCH --mail-user=swalter@cs.uni-freiburg.de
 #SBATCH --mail-type=BEGIN,END,FAIL,REQUEUE
 #SBATCH --time=24:00:00
 
@@ -19,10 +17,6 @@ else
   is_local=true
 fi
 script_dir=$(dirname $script_dir)
-workspace=$(realpath $script_dir/../..)
-code=$(realpath $workspace/src/whitespace_correction)
-cd $workspace
-echo "Script is located at $script_dir, workspace is $workspace, code is at $code"
 
 if [[ $is_local == true || $force_local == true ]]; then
   echo "Running locally (force_local=$force_local)"
@@ -32,10 +26,10 @@ if [[ $is_local == true || $force_local == true ]]; then
 else
   master_addr=$(scontrol show hostnames "$SLURM_JOB_NODELIST" | head -n 1)
   # set the master port to a random port on the slurm cluster, but seed with the job id so every
-  # tasks get the same port
+  # task gets the same port
   master_port=$(python3 -c "import random; print(random.Random($SLURM_JOB_ID).randint(10000, 60000))")
   world_size=$(( $SLURM_NTASKS_PER_NODE * $SLURM_JOB_NUM_NODES ))
-  echo "Running on Slurm Cluster, master machine at $master_addr:$master_port"
+  echo "Running on Slurm, master machine at $master_addr:$master_port"
 fi
 
 # for pytorch distributed
@@ -46,17 +40,24 @@ export WORLD_SIZE=$world_size
 config=${CONFIG?"env var CONFIG not found"}
 experiment=${EXPERIMENT?"env var EXPERIMENT not found"}
 
-train_cmd="python3 -W ignore $code/train.py --config $config --experiment $experiment"
+# TODO: change this to the path of your training script
+train_script=$(realpath $script_dir/../src/whitespace_correction/api/train.py)
+train_cmd="python3 -W ignore $train_script --config $config --experiment $experiment"
 
+# set timeout to something slightly smaller than the jobs time limit
 time_out=${TIMEOUT:-23.75h}
 if [[ $is_local == true || $force_local == true ]]; then
   echo "Starting local training with cmd $train_cmd"
-  timeout -s SIGINT $time_out $train_cmd --local
+  train_cmd="$train_cmd --platform local"
+  timeout -s SIGINT $time_out $train_cmd
 else
-  echo "Starting slurm distributed training with cmd $train_cmd"
+  echo "Starting Slurm distributed training with cmd $train_cmd"
+  train_cmd="$train_cmd --platform slurm"
   srun timeout -s SIGINT $time_out $train_cmd
 fi
 
-if [[ $? == 124 ]]; then
+# if timeout is reached (exit code 124) and we run on Slurm, 
+# requeue the job (training will resume from latest checkpoint)
+if [[ $? == 124 && $is_local == false ]]; then
     scontrol requeue $SLURM_JOB_ID
 fi
