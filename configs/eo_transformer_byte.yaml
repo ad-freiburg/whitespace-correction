@@ -3,27 +3,23 @@ experiment:
 
 seed: 22
 
-input_tokenizer: file(tokenizers/byte.yaml)
+input_tokenizer: file(tokenizers/byte_code_points.yaml)
 
 model:
   type: encoder_with_head
   embedding:
-    type: standard
+    type: byte
+    groups: code_points
     embedding_dim: env(DIM:512)
     dropout: 0.0
-    max_length: env(MAX_LENGTH:1024)
   encoder:
-    type: grouping
-    group_first: env(GROUP_FIRST:true)
-    group_aggregation: mean
-    encoder:
-      type: transformer
-      dim: env(DIM:512)
-      num_layers: env(NUM_LAYERS:6)
-      heads: 8
-      ffw_dim: 2048
-      dropout: 0.1
-      with_pos: alibi
+    type: transformer
+    dim: env(DIM:512)
+    num_layers: env(NUM_LAYERS:6)
+    heads: 8
+    ffw_dim: 2048
+    dropout: 0.1
+    with_pos: alibi
   head:
     type: sequence_classification
     dim: env(DIM:512)
@@ -68,7 +64,7 @@ train:
       preprocessing: file(preprocessings/whitespace_noise_byte.yaml)
       labeling:
         type: whitespace_correction
-      tokenizer: file(tokenizers/byte.yaml)
+      tokenizer: file(tokenizers/byte_code_points.yaml)
     sources:
       - type: file
         path: abspath(env(DATA_FILE))
