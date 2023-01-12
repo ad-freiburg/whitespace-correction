@@ -144,7 +144,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         else:
             raise ValueError(f"unknown info type {info_type}")
 
-    def _prepare_batch(self, batch: data.InferenceItemBatch) -> Dict[str, Any]:
+    def _prepare_batch(self, batch: data.InferenceBatch) -> Dict[str, Any]:
         if self.cfg["model"]["type"] == "encoder_with_head":
             pad_token_id = self.input_tokenizer.pad_token_id()
             token_ids = []
