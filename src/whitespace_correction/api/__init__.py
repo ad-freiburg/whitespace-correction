@@ -1,2 +1,1 @@
 from whitespace_correction.api.corrector import WhitespaceCorrector
-from whitespace_correction.api.cli import WhitespaceCorrectionCli
