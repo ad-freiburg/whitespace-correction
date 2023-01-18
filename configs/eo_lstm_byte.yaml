@@ -32,10 +32,10 @@ train:
   eval_interval: eval(1 / env(EVAL_PER_EPOCH:5))
   log_interval: eval(1 / env(LOG_PER_EPOCH:100))
   loss:
-    type: sequence_focal
-    weights: [1, 10, 10]
+    type: sequence_cross_entropy
+    weights: [1, 5, 5]
     ignore_index: -1
-    gamma: 2
+    # gamma: 2
   optimizer:
     type: adamw
     lr: env(LR:0.0001)
