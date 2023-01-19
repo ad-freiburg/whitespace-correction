@@ -8,18 +8,21 @@ input_tokenizer: file(tokenizers/byte.yaml)
 model:
   type: encoder_with_head
   embedding:
-    type: byte
-    groups: bytes
+    type: standard
     embedding_dim: env(DIM:512)
     dropout: 0.0
   encoder:
-    type: transformer
-    dim: env(DIM:512)
-    num_layers: env(NUM_LAYERS:6)
-    heads: 8
-    ffw_dim: 2048
-    dropout: 0.1
-    with_pos: alibi
+    type: grouping
+    group_first: true
+    group_name: byte_groups
+    encoder:
+      type: transformer
+      dim: env(DIM:512)
+      num_layers: env(NUM_LAYERS:6)
+      heads: 8
+      ffw_dim: 2048
+      dropout: 0.1
+      with_pos: alibi
   head:
     type: sequence_classification
     dim: env(DIM:512)
@@ -31,7 +34,7 @@ train:
   mixed_precision: true
   mixed_precision_dtype: env(MIXED_PRECISION_DTYPE:fp16)
   clip_grad_norm: 1.0
-  num_epochs: 3
+  num_epochs: env(NUM_EPOCHS:3)
   eval_interval: eval(1 / env(EVAL_PER_EPOCH:5))
   log_interval: eval(1 / env(LOG_PER_EPOCH:100))
   loss:

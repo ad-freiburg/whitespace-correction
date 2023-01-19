@@ -26,7 +26,7 @@ def main():
     args = parser.parse_args()
     work_dir = os.path.join(os.path.dirname(__file__), "..", "..", "..")
     if args.platform == "local":
-        WhitespaceCorrectionTrainer.train_local(work_dir, args.experiment, args.config)
+        WhitespaceCorrectionTrainer.train_local(work_dir, args.experiment, args.config, args.profile)
     else:
         WhitespaceCorrectionTrainer.train_slurm(work_dir, args.experiment, args.config)
 
