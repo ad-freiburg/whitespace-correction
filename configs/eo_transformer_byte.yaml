@@ -35,7 +35,7 @@ train:
   mixed_precision_dtype: env(MIXED_PRECISION_DTYPE:fp16)
   clip_grad_norm: 1.0
   num_epochs: env(NUM_EPOCHS:3)
-  eval_interval: eval(1 / env(EVAL_PER_EPOCH:5))
+  eval_interval: eval(1 / env(EVAL_PER_EPOCH:10))
   log_interval: eval(1 / env(LOG_PER_EPOCH:100))
   loss:
     type: sequence_cross_entropy
