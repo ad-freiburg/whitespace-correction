@@ -3,7 +3,7 @@ experiment:
 
 seed: 22
 
-input_tokenizer: file(tokenizers/byte.yaml)
+input_tokenizer: file(tokenizers/byte_code_points.yaml)
 
 model:
   type: encoder_with_head
@@ -14,7 +14,7 @@ model:
   encoder:
     type: grouping
     group_first: true
-    group_name: byte_groups
+    group_name: code_point_groups
     encoder:
       type: transformer
       dim: env(DIM:512)
@@ -38,10 +38,10 @@ train:
   eval_interval: eval(1 / env(EVAL_PER_EPOCH:10))
   log_interval: eval(1 / env(LOG_PER_EPOCH:100))
   loss:
-    type: sequence_cross_entropy
-    weights: [1, 5, 5]
+    type: sequence_focal
+    weights: [1, 10, 10]
     ignore_index: -1
-    # gamma: 2
+    gamma: 2
   optimizer:
     type: adamw
     lr: env(LR:0.0001)
@@ -65,7 +65,7 @@ train:
       preprocessing: file(preprocessings/whitespace_noise_byte.yaml)
       labeling:
         type: whitespace_correction
-      tokenizer: file(tokenizers/byte.yaml)
+      tokenizer: file(tokenizers/byte_code_points.yaml)
     sources:
       - type: file
         path: abspath(env(DATA_FILE))
