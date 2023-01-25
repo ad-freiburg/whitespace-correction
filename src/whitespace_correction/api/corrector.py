@@ -145,7 +145,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         if self.cfg["model"]["type"] == "encoder_with_head":
             token_ids_np, lengths, info = batch.tensors
             inputs = {
-                "token_ids": torch.from_numpy(token_ids_np).to(device=self.device),
+                "token_ids": torch.from_numpy(token_ids_np).to(non_blocking=True, device=self.device),
                 "lengths": lengths,
                 **info
             }
