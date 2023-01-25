@@ -58,7 +58,7 @@ train:
     shuffle: true
     sort: true
     buffer_size: env(BATCH_LIMIT:32)
-    prefetch_factor: env(BATCH_LIMIT:32) 
+    prefetch_factor: env(PREFETCH_FACTOR:2048)
     num_threads: env(THREADS:eval(len(os.sched_getaffinity(0)) // 2))
     batch_limit: eval(env(MAX_LENGTH:1024) * env(BATCH_LIMIT:32))
     batch_limit_type: padded_item_size
