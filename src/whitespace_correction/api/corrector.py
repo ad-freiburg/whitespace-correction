@@ -1,4 +1,3 @@
-import collections
 from io import TextIOWrapper
 import math
 import os
@@ -274,6 +273,9 @@ class WhitespaceCorrector(corrector.TextCorrector):
         if output_file is not None:
             output_file_is_str = isinstance(output_file, str)
             if output_file_is_str:
+                output_dir = os.path.dirname(output_file)
+                if output_dir != "":
+                    os.makedirs(output_dir, exist_ok=True)
                 output_file = open(output_file, "w", encoding="utf8")
 
             for output in outputs:
