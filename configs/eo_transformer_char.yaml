@@ -66,6 +66,6 @@ train:
     sources:
       - type: file
         path: abspath(env(DATA_FILE))
-        temp_dir: abspath(env(TMPDIR))
+        # temp_dir: abspath(env(TMPDIR))
         language: en
     val: env(VAL_LIMIT:10000)
