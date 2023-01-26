@@ -35,7 +35,8 @@ class WhitespaceCorrectionCli(TextCorrectionCli):
             self.args.batch_max_tokens,
             not self.args.unsorted,
             self.args.num_threads,
-            True
+            return_raw=True,
+            show_progress=self.args.progress
         )
 
     def correct_file(
@@ -55,6 +56,7 @@ class WhitespaceCorrectionCli(TextCorrectionCli):
             self.args.batch_max_tokens,
             not self.args.unsorted,
             self.args.num_threads,
+            show_progress=self.args.progress
         )
 
 

@@ -1,6 +1,7 @@
 from io import TextIOWrapper
 import math
 import os
+import sys
 from typing import Any, Dict, List, Tuple, Optional, Union, Iterator
 
 import torch
@@ -12,7 +13,7 @@ from whitespace_correction.model import model_from_config
 from text_correction_utils import data, whitespace, tokenization
 from text_correction_utils.api.corrector import ModelInfo
 from text_correction_utils.api import corrector
-from text_correction_utils.api.utils import device_info
+from text_correction_utils.api.utils import device_info, to
 
 _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
     "EMNLP_whitespace_correction_transformer_BHW_2022.materials"
@@ -143,11 +144,12 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
     def _prepare_batch(self, batch: data.InferenceBatch) -> Dict[str, Any]:
         if self.cfg["model"]["type"] == "encoder_with_head":
-            token_ids_np, lengths, info = batch.tensors
+            token_ids_np, pad_mask_np, lengths, info = batch.tensors
             inputs = {
                 "token_ids": torch.from_numpy(token_ids_np).to(non_blocking=True, device=self.device),
+                "padding_mask": torch.from_numpy(pad_mask_np).to(non_blocking=True, device=self.device),
                 "lengths": lengths,
-                **info
+                **to(info, self.device)
             }
             return inputs
         else:
@@ -176,7 +178,8 @@ class WhitespaceCorrector(corrector.TextCorrector):
             batch_size: int = 16,
             batch_max_tokens: Optional[int] = None,
             sort: bool = True,
-            num_threads: Optional[int] = None
+            num_threads: Optional[int] = None,
+            show_progress: bool = False
     ) -> Union[str, List[str]]:
         input_is_string = isinstance(inputs, str)
         assert (
@@ -206,13 +209,31 @@ class WhitespaceCorrector(corrector.TextCorrector):
             batch_size,
             batch_max_tokens,
             sort,
-            num_threads
+            num_threads,
         )
+
+        progress_desc = f"Correcting whitespaces in {len(inputs)} sequences"
+        progress_total = len(inputs)
+        progress_unit = "seq"
+
         if sort:
-            outputs = self._correct_sorted(loader)
-            return outputs[0].text if input_is_string else [output.text for output in outputs]
+            outputs = self._correct_sorted(
+                loader,
+                progress_desc,
+                progress_total,
+                progress_unit,
+                show_progress
+            )
         else:
-            return [output.text for output in self._correct_unsorted(loader)]
+            outputs = self._correct_unsorted(
+                loader,
+                progress_desc,
+                progress_total,
+                progress_unit,
+                show_progress
+            )
+
+        return next(iter(outputs)).text if input_is_string else [output.text for output in outputs]
 
     def correct_iter(
         self,
@@ -221,19 +242,37 @@ class WhitespaceCorrector(corrector.TextCorrector):
         batch_max_tokens: Optional[int] = None,
         sort: bool = True,
         num_threads: Optional[int] = None,
-        return_raw: bool = False
+        return_raw: bool = False,
+        show_progress: bool = False
     ) -> Union[Iterator[str], Iterator[data.InferenceData]]:
         loader = self._get_loader(
             (data.InferenceData(s, language=l) for s, l in iter),
             batch_size,
             batch_max_tokens,
             sort,
-            num_threads
+            num_threads,
         )
+
+        progress_desc = "Correcting whitespaces in iterator"
+        progress_total = sys.maxsize
+        progress_unit = "byte"
+
         if sort:
-            output = self._correct_sorted(loader)
+            output = self._correct_sorted(
+                loader,
+                progress_desc,
+                progress_total,
+                progress_unit,
+                show_progress
+            )
         else:
-            output = self._correct_unsorted(loader)
+            output = self._correct_unsorted(
+                loader,
+                progress_desc,
+                progress_total,
+                progress_unit,
+                show_progress
+            )
 
         if return_raw:
             yield from output
@@ -251,6 +290,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
             batch_max_tokens: Optional[int] = None,
             sort: bool = True,
             num_threads: Optional[int] = None,
+            show_progress: bool = False
     ) -> Optional[Iterator[str]]:
         assert input_file_format in self.supported_input_formats(), f"unsupported input file format {input_file_format}, \
         must be one of {self.supported_input_formats()}"
@@ -262,13 +302,30 @@ class WhitespaceCorrector(corrector.TextCorrector):
             batch_max_tokens,
             sort,
             num_threads,
-            file_format=input_file_format
+            file_format=input_file_format,
         )
 
+        file_name = input_file if len(input_file) < 32 else f"...{input_file[-29:]}"
+        progress_desc = f"Correcting whitespaces in {file_name}"
+        progress_total = os.path.getsize(input_file)
+        progress_unit = "byte"
+
         if sort:
-            outputs = iter(self._correct_sorted(loader))
+            outputs = iter(self._correct_sorted(
+                loader,
+                progress_desc,
+                progress_total,
+                progress_unit,
+                show_progress
+            ))
         else:
-            outputs = self._correct_unsorted(loader)
+            outputs = self._correct_unsorted(
+                loader,
+                progress_desc,
+                progress_total,
+                progress_unit,
+                show_progress
+            )
 
         if output_file is not None:
             output_file_is_str = isinstance(output_file, str)
