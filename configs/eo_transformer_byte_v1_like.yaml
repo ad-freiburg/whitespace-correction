@@ -1,0 +1,70 @@
+experiment:
+  name: env(EXPERIMENT_NAME)
+
+seed: 22
+
+input_tokenizer: file(tokenizers/byte_code_points.yaml)
+
+model:
+  type: encoder_with_head
+  embedding:
+    type: standard
+    embedding_dim: env(DIM:512)
+    dropout: 0.1
+  encoder:
+    type: grouping
+    group_first: true
+    group_name: code_point_groups
+    encoder:
+      type: transformer
+      dim: env(DIM:512)
+      num_layers: env(NUM_LAYERS:6)
+      heads: 8
+      ffw_dim: 2048
+      dropout: 0.1
+      with_pos: alibi
+  head:
+    type: sequence_classification
+    dim: env(DIM:512)
+    num_layers: 2
+    dropout: 0.1
+    num_classes: 3
+
+train:
+  mixed_precision: true
+  mixed_precision_dtype: env(MIXED_PRECISION_DTYPE:fp16)
+  # clip_grad_norm: 1.0
+  num_epochs: env(NUM_EPOCHS:3)
+  eval_interval: eval(1 / env(EVAL_PER_EPOCH:10))
+  log_interval: eval(1 / env(LOG_PER_EPOCH:100))
+  loss: file(losses/env(LOSS:focal_v1).yaml)
+  optimizer:
+    type: adamw
+    lr: env(LR:0.0002)
+    weight_decay: 0.01
+  lr_scheduler:
+    type: cosine_with_warmup
+    warmup_steps: 0.01
+  metrics:
+    whitespace_correction:
+      max_items: 4
+  data:
+    strategy: weighted
+    shuffle: true
+    sort: true
+    buffer_size: env(BATCH_LIMIT:32)
+    prefetch_factor: env(PREFETCH_FACTOR:2048)
+    num_threads: eval(env(THREADS:None) or len(os.sched_getaffinity(0)) // 2)
+    batch_limit: eval(env(MAX_LENGTH:1024) * env(BATCH_LIMIT:32))
+    batch_limit_type: padded_item_size
+    pipeline:
+      preprocessing: file(preprocessings/whitespace_noise_byte_v1.yaml)
+      labeling:
+        type: whitespace_correction
+      tokenizer: file(tokenizers/byte_code_points.yaml)
+    sources:
+      - type: file
+        path: abspath(env(DATA_FILE))
+        temp_dir: abspath(env(TMP))
+        language: en
+    val: env(VAL_LIMIT:10000)

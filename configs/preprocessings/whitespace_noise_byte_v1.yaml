@@ -1,0 +1,17 @@
+- type: clean
+- type: normalize
+  scheme: NFKC
+- type: overwrite
+- type: switch
+  configs:
+    - type: noise_whitespaces
+      insert_whitespace_prob: 0.1
+      delete_whitespace_prob: 0.2
+    - type: full_whitespaces
+    - type: no_whitespaces
+  probabilities:
+    - 0.8
+    - 0.1
+    - 0.1
+- type: byte_substring
+  max_bytes: eval(env(MAX_LENGTH:512) - 2)
