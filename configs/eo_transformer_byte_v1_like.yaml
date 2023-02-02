@@ -23,6 +23,7 @@ model:
       ffw_dim: 2048
       dropout: 0.1
       with_pos: alibi
+      padding_mask: group_padding_mask
   head:
     type: sequence_classification
     dim: env(DIM:512)
