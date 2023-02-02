@@ -11,7 +11,6 @@ class WhitespaceCorrectionServer(TextCorrectionServer):
     text_corrector_cls = WhitespaceCorrector
 
     def __init__(self, config: Dict[str, Any]):
-        print(self.text_corrector_cls)
         super().__init__(config)
 
         @self.server.route(f"{self.base_url}/correct", methods=["POST"])
