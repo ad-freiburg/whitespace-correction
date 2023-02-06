@@ -136,3 +136,6 @@ dmypy.json
 
 # Slurm
 *.slurm
+
+# Custom
+wheels
