@@ -65,4 +65,5 @@ train:
         path: abspath(env(DATA_FILE))
         temp_dir: abspath(env(TMP))
         language: en
+        limit: env(TRAIN_LIMIT:10000000)
     val: env(VAL_LIMIT:10000)
