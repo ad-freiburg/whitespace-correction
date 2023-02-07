@@ -1,5 +1,5 @@
 import copy
-from typing import Dict, Any, Optional, List, Tuple, Union
+from typing import Dict, Any, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -10,6 +10,8 @@ from text_correction_utils.modules.encoder import Encoder, encoder_from_config
 from text_correction_utils.modules.decoder import Decoder, decoder_from_config
 from text_correction_utils.modules.head import Head, head_from_config
 
+from transformers import T5EncoderModel
+
 
 class Model(nn.Module):
     def forward(
@@ -18,6 +20,26 @@ class Model(nn.Module):
         **kwargs: Any
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         raise NotImplementedError
+
+
+class PretrainedEncoderWithHead(Model):
+    def __init__(
+        self,
+        encoder: Encoder,
+        head: Head
+    ):
+        super().__init__()
+        self.encoder = encoder
+        self.head = head
+
+    def forward(
+        self,
+        token_ids: torch.Tensor,
+        **kwargs: Any
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        enc, kwargs = self.encoder(token_ids, **kwargs)
+        output = self.head(enc, **kwargs)
+        return output, self.encoder.additional_losses()
 
 
 class EncoderWithHead(Model):
@@ -38,7 +60,7 @@ class EncoderWithHead(Model):
         **kwargs: Any
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         emb, pos_emb = self.embedding(token_ids, **kwargs)
-        enc, kwargs = self.encoder(emb, pos_emb, **kwargs)
+        enc, kwargs = self.encoder(emb, pos=pos_emb, **kwargs)
         output = self.head(enc, **kwargs)
         return output, self.encoder.additional_losses()
 
@@ -106,13 +128,60 @@ class EncoderDecoderWithHead(Model):
 
     def forward(
         self,
-        src_token_ids: torch.Tensor,
-        tgt_token_ids: torch.Tensor,
+        _: torch.Tensor,
+        **__: Any
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        raise NotImplementedError
+
+
+class ByT5Encoder(Encoder):
+    def __init__(
+        self,
+        name: str,
+        pad_token_id: int,
+    ):
+        super().__init__()
+        self.encoder = T5EncoderModel.from_pretrained(name)
+        self.pad_token_id = pad_token_id
+
+    def forward(
+        self,
+        token_ids: torch.Tensor,
         **kwargs: Any
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        enc, kwargs = self.encode(src_token_ids, **kwargs)
-        dec = self.decode(tgt_token_ids, enc, **kwargs)
-        return dec, {**self.encoder.additional_losses(), **self.decoder.additional_losses()}
+        enc = self.encoder(
+            input_ids=token_ids,
+            attention_mask=(token_ids != self.pad_token_id).long()
+        ).last_hidden_state
+        return enc, kwargs
+
+
+class ByT5WithHead(Model):
+    def __init__(
+        self,
+        encoder: ByT5Encoder,
+        head: Head,
+    ):
+        super().__init__()
+        self.encoder = encoder
+        self.head = head
+
+    def forward(
+        self,
+        token_ids: torch.Tensor,
+        **kwargs: Any
+    ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
+        enc, kwargs = self.encoder(token_ids, **kwargs)
+        return self.head(enc, **kwargs)
+
+
+def pretrained_encoder_from_config(cfg: Dict[str, Any], input_tokenizer: tokenization.Tokenizer) -> Encoder:
+    if cfg["type"] == "byt5":
+        pad_token_id = input_tokenizer.pad_token_id()
+        assert "name" in cfg, "name must be provided for byt5 encoder"
+        return ByT5Encoder(cfg["name"], pad_token_id)
+    else:
+        raise ValueError(f"unknown pretrained encoder type {cfg['type']}")
 
 
 def model_from_config(
@@ -122,7 +191,14 @@ def model_from_config(
 ) -> Model:
     cfg = copy.deepcopy(cfg)
     model_type = cfg.pop("type")
-    if model_type == "encoder_with_head":
+    if model_type == "pretrained_encoder_with_head":
+        encoder = encoder_from_config(
+            cfg["encoder"],
+            additional_encoder_fn=lambda cfg: pretrained_encoder_from_config(cfg, input_tokenizer)
+        )
+        head = head_from_config(cfg["head"])
+        return PretrainedEncoderWithHead(encoder, head)
+    elif model_type == "encoder_with_head":
         embedding = embedding_from_config(cfg["embedding"], input_tokenizer)
         encoder = encoder_from_config(cfg["encoder"])
         head = head_from_config(cfg["head"])
