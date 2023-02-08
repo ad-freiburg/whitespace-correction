@@ -22,6 +22,8 @@ class WhitespaceCorrectionServer(TextCorrectionServer):
                 return abort(Response("request body must be json", status=400))
             if "model" not in json:
                 return abort(Response("missing model in json", status=400))
+            if "text" not in json:
+                return abort(Response("missing text in json", status=400))
             try:
                 with self.text_corrector(json["model"]) as cor:
                     if isinstance(cor, Error):
@@ -30,17 +32,16 @@ class WhitespaceCorrectionServer(TextCorrectionServer):
                     start = time.perf_counter()
                     iter = ProgressIterator(
                         ((t, None) for t in json["text"]),
-                        size_fn=lambda e: len(e[1].encode("utf8"))
+                        size_fn=lambda e: len(e[0].encode("utf8"))
                     )
                     corrected = list(cor.correct_iter(iter))
                     end = time.perf_counter()
-                    kb = iter.total_size / 1000
+                    b = iter.total_size
                     s = end - start
-                    kbps = kb / s
             except Exception as error:
                 return abort(Response(f"request failed with unexpected error: {error}", status=500))
 
             return jsonify({
                 "text": corrected,
-                "runtime": {"kb": kb, "s": s, "kbps": kbps}
+                "runtime": {"b": b, "s": s}
             })
