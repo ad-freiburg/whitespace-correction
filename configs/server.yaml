@@ -2,7 +2,7 @@ port: 40000
 timeout: 10
 # precision: fp16
 # allow_origin: test.mydomain.com 
-# base_url: api
+base_url: env(BASE_URL:/api)
 models:
   # load a pretrained model by specifying the name
   # - eo_large_arxiv
@@ -10,4 +10,3 @@ models:
   # directory path (you can use special configuration operators,
   # e.g. env(ENV_VAR) to load env variables)
   - env(EXPERIMENT)
-
