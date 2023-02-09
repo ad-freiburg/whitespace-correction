@@ -195,6 +195,10 @@ You can also run this project using docker. Build the image using
 
 `docker build -t whitespace-correction .`
 
+If you have an older GPU build the image using
+
+`docker build -t whitespace-correction` -f Dockerfile.old .`
+
 By default, the entrypoint is set to the `wsc` command, 
 so you can use the Docker setup like described [here](#from-command-line) earlier.
 
