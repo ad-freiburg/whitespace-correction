@@ -20,7 +20,9 @@ _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
     "EMNLP_whitespace_correction_transformer_BHW_2022.materials"
 _NAME_TO_ZIP = {
     "eo_large_v1": "eo_large_v1.zip",
+    "eo_large_v2": "eo_large_v2.zip",
     "eo_medium_v1": "eo_medium_v1.zip",
+    "eo_medium_v2": "eo_medium_v2.zip",
     # "eo_small": "eo_small.zip",
     "ed_large_v1": "ed_large_v1.zip",
     "ed_medium_v1": "ed_medium_v1.zip",
@@ -35,24 +37,34 @@ class WhitespaceCorrector(corrector.TextCorrector):
     def available_models(cls) -> List[ModelInfo]:
         return [
             ModelInfo(
+                name="eo_large_v2",
+                description="Combines fast inference and good performance",
+                tags=["default", "lang::en", "arch::encoder-only", "input::byte"]
+            ),
+            ModelInfo(
                 name="eo_large_v1",
                 description="Combines fast inference and good performance",
-                tags=["default", "lang::en", "arch::encoder-only"]
+                tags=["lang::en", "arch::encoder-only", "input::char"]
+            ),
+            ModelInfo(
+                name="eo_medium_v2",
+                description="Encoder-only model; smaller and faster than eo_large_v2, but less accurate",
+                tags=["lang::en", "arch::encoder-only", "input::byte"]
             ),
             ModelInfo(
                 name="eo_medium_v1",
                 description="Encoder-only model; smaller and faster than eo_large_v1, but less accurate",
-                tags=["lang::en", "arch::encoder-only"]
+                tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
                 name="ed_large_v1",
                 description="Similar to eo_large_v1 in size",
-                tags=["lang::en", "arch::encoder-decoder"]
+                tags=["lang::en", "arch::encoder-decoder", "input::char", "output::char"]
             ),
             ModelInfo(
                 name="ed_medium_v1",
                 description="Smaller and faster than ed_large_v1, but less accurate",
-                tags=["lang::en", "arch::encoder-decoder"]
+                tags=["lang::en", "arch::encoder-decoder", "input::char", "output::char"]
             ),
         ]
 
