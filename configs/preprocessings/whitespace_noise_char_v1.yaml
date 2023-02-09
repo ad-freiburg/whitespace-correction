@@ -6,7 +6,7 @@
   configs:
     - type: noise_whitespaces
       insert_whitespace_prob: 0.1
-      delete_whitespace_prob: 0.4
+      delete_whitespace_prob: 0.2
     - type: full_whitespaces
     - type: no_whitespaces
   probabilities:
