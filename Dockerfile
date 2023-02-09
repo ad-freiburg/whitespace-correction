@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/pytorch:22.05-py3
+FROM nvcr.io/nvidia/pytorch:23.01-py3
 
 WORKDIR /wsc
 RUN apt update && apt install -y build-essential
