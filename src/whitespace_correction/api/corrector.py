@@ -1,6 +1,5 @@
 from io import TextIOWrapper
 import math
-import re
 import os
 import sys
 from typing import Any, Dict, List, Tuple, Optional, Union, Iterator
@@ -15,7 +14,7 @@ from text_correction_utils import data, whitespace, tokenization
 from text_correction_utils.api.corrector import ModelInfo
 from text_correction_utils.api import corrector
 from text_correction_utils.api.utils import device_info, to
-from text_correction_utils.inference import IdxSelectFn, eos_stop_fn, greedy_select_fn, search, beam_search
+from text_correction_utils.inference import IdxSelectFn, eos_stop_fn, search
 
 _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
     "EMNLP_whitespace_correction_transformer_BHW_2022.materials"

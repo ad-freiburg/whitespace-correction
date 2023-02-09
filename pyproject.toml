@@ -1,6 +1,6 @@
 [project]
 name = "whitespace_correction"
-version = "0.0.1"
+version = "0.1.0"
 description = "Correct missing or spurious whitespaces in text."
 authors = [
     { name = "Sebastian Walter", email = "swalter@cs.uni-freiburg.de" }
@@ -20,14 +20,8 @@ classifiers = [
 ]
 
 dependencies = [
-    "torch>=1.8.0",
-    "einops>=0.3.0",
-    "numpy>=1.19.0",
-    "pyyaml>=5.4.0",
-    "tqdm>=4.49.0",
-    "requests>=2.27.0",
-    "flask>=2.0.0",
-    "tensorboard>=2.8.0"
+    "text-correction-utils>=0.1.1",
+    "transformers>=4.26.0"
 ]
 
 [project.scripts]
