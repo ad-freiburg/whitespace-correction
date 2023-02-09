@@ -1,0 +1,3 @@
+tokenize:
+  type: byt5
+  groups: code_points

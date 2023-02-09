@@ -1,0 +1,7 @@
+tokenize:
+  type: byte
+  groups: code_points
+prefix:
+  - "<bos>"
+suffix:
+  - "<eos>"

@@ -1,0 +1,7 @@
+tokenize:
+  type: byte
+  groups: bytes
+prefix:
+  - "<bos>"
+suffix:
+  - "<eos>"

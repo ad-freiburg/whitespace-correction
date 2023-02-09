@@ -1,0 +1,6 @@
+tokenize:
+  type: character
+prefix:
+  - "<bos>"
+suffix:
+  - "<eos>"

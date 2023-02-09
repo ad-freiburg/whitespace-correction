@@ -1,0 +1,39 @@
+[project]
+name = "whitespace_correction"
+version = "0.1.0"
+description = "Correct missing or spurious whitespaces in text."
+authors = [
+    { name = "Sebastian Walter", email = "swalter@cs.uni-freiburg.de" }
+]
+readme = "README.md"
+license = { file = "LICENSE" }
+requires-python = ">=3.8"
+
+keywords = ["nlp", "text", "correction", "whitespace"]
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries",
+    "Topic :: Text Processing",
+    "Topic :: Utilities"
+]
+
+dependencies = [
+    "text-correction-utils>=0.1.2",
+    "transformers>=4.26.0"
+]
+
+[project.scripts]
+"wsc" = "whitespace_correction.api.cli:main"
+
+[project.urls]
+Github = "https://github.com/ad-freiburg/whitespace-correction"
+Website= "https://whitespace-correction.cs.uni-freiburg.de"
+
+[tool.distutils.bdist_wheel]
+universal = true
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
