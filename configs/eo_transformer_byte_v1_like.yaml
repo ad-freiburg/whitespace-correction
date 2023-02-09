@@ -38,7 +38,7 @@ train:
   num_epochs: env(NUM_EPOCHS:3)
   eval_interval: eval(1 / env(EVAL_PER_EPOCH:10))
   log_interval: eval(1 / env(LOG_PER_EPOCH:100))
-  loss: file(losses/env(LOSS:focal_v1).yaml)
+  loss: file(losses/env(LOSS:focal).yaml)
   optimizer:
     type: adamw
     lr: env(LR:0.0002)
