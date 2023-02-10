@@ -10,7 +10,7 @@ from text_correction_utils.modules.encoder import Encoder, encoder_from_config
 from text_correction_utils.modules.decoder import Decoder, decoder_from_config
 from text_correction_utils.modules.head import Head, head_from_config
 
-from transformers import T5EncoderModel
+from transformers import T5EncoderModel, T5Config
 
 
 class Model(nn.Module):
@@ -139,9 +139,15 @@ class ByT5Encoder(Encoder):
         self,
         name: str,
         pad_token_id: int,
+        pretrained: bool = True
     ):
         super().__init__()
-        self.encoder = T5EncoderModel.from_pretrained(name)
+        if pretrained:
+            self.encoder = T5EncoderModel.from_pretrained(name)
+        else:
+            config = T5Config.from_pretrained(name)
+            self.encoder = T5EncoderModel(config)
+
         self.pad_token_id = pad_token_id
 
     def forward(
