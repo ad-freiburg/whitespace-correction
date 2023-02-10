@@ -91,7 +91,9 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
     @property
     def max_length(self) -> int:
-        if self.cfg["model"]["type"] == "encoder_with_head":
+        if self.cfg["model"]["type"] == "pretrained_encoder_with_head":
+            return 512
+        elif self.cfg["model"]["type"] == "encoder_with_head":
             return self.cfg["model"]["embedding"].get("max_length", 512)
         elif self.cfg["model"]["type"] == "encoder_decoder_with_head":
             return self.cfg["model"]["encoder_embedding"].get("max_length", 512)
@@ -126,7 +128,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         else:
             self.output_tokenizer = None
 
-        self._encoder_only = self.cfg["model"]["type"] == "encoder_with_head"
+        self._encoder_only = self.cfg["model"]["type"].endswith("encoder_with_head")
         self._pfx = self.input_tokenizer.num_prefix_tokens()
         self._sfx = self.input_tokenizer.num_suffix_tokens()
 
@@ -140,7 +142,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         max_length = self.max_length - pfx - sfx
         window_size = math.ceil(0.75 * max_length)
         context_size = (max_length - window_size) // 2
-        if self.cfg["input_tokenizer"]["tokenize"]["type"] == "byte":
+        if self.cfg["input_tokenizer"]["tokenize"]["type"] in {"byte", "byt5"}:
             window_cfg = {"type": "byte", "max_bytes": max_length, "context_bytes": context_size}
         elif self.cfg["input_tokenizer"]["tokenize"]["type"] == "character":
             window_cfg = {"type": "character", "max_chars": max_length, "context_chars": context_size}
