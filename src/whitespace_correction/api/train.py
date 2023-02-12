@@ -1,6 +1,5 @@
 import os
 from typing import Dict, Any
-from typing_extensions import override
 
 from torch import nn
 
@@ -11,7 +10,7 @@ from whitespace_correction.model import model_from_config
 
 
 class WhitespaceCorrectionTrainer(Trainer):
-    @override
+    @classmethod
     def _model_from_config(cls, cfg: Dict[str, Any]) -> nn.Module:
         input_tokenizer = tokenization.Tokenizer.from_config(cfg["input_tokenizer"])
         if "output_tokenizer" in cfg:
