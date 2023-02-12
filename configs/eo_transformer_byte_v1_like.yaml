@@ -33,7 +33,7 @@ model:
     num_classes: 3
 
 train:
-  mixed_precision: true
+  mixed_precision: env(MIXED_PRECISION:true)
   mixed_precision_dtype: env(MIXED_PRECISION_DTYPE:fp16)
   # clip_grad_norm: 1.0
   num_epochs: env(NUM_EPOCHS:3)
