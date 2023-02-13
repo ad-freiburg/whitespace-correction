@@ -11,6 +11,9 @@ model:
     type: standard
     embedding_dim: env(DIM:512)
     dropout: 0.1
+    mode: add_norm
+    positional_embeddings: sinusoidal
+    max_length: env(MAX_LENGTH:512)
   encoder:
     type: transformer
     dim: env(DIM:512)
@@ -18,7 +21,6 @@ model:
     heads: 8
     ffw_dim: 2048
     dropout: 0.1
-    with_pos: alibi
   head:
     type: sequence_classification
     dim: env(DIM:512)
@@ -36,7 +38,7 @@ train:
   loss: file(losses/env(LOSS:focal).yaml)
   optimizer:
     type: adamw
-    lr: env(LR:0.0002)
+    lr: env(LR:0.0001)
     weight_decay: 0.01
   lr_scheduler:
     type: cosine_with_warmup
