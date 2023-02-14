@@ -26,7 +26,7 @@ model:
 train:
   mixed_precision: env(MIXED_PRECISION:true)
   mixed_precision_dtype: env(MIXED_PRECISION_DTYPE:bfp16)
-  # clip_grad_norm: 1.0
+  clip_grad_norm: env(CLIP_GRAD_NORM:1.0)
   num_epochs: env(NUM_EPOCHS:3)
   eval_interval: eval(1 / env(EVAL_PER_EPOCH:10))
   log_interval: eval(1 / env(LOG_PER_EPOCH:100))
