@@ -10,7 +10,7 @@ model:
   embedding:
     type: standard
     embedding_dim: env(DIM:512)
-    dropout: 0.0
+    dropout: 0.1
   encoder:
     type: rnn
     rnn_type: lstm
@@ -21,7 +21,7 @@ model:
   head:
     type: sequence_classification
     dim: env(DIM:512)
-    num_layers: 2
+    num_layers: 1
     dropout: 0.1
     num_classes: 3
 
