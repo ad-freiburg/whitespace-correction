@@ -48,7 +48,7 @@ train:
     weight_decay: 0.01
   lr_scheduler:
     type: cosine_with_warmup
-    warmup_steps: 0.01
+    warmup_steps: env(WARMUP_STEPS:0.01)
   metrics:
     whitespace_correction:
       max_items: 4
