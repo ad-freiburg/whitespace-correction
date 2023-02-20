@@ -17,16 +17,16 @@ from text_correction_utils.api.utils import device_info, to
 from text_correction_utils.inference import IdxSelectFn, eos_stop_fn, search
 
 _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
-    "EMNLP_whitespace_correction_transformer_BHW_2022.materials"
+    "ACL_whitespace_correction_transformer_BHW_2023.materials"
 _NAME_TO_ZIP = {
-    "eo_large_v1": "eo_large_v1.zip",
-    "eo_large_v2": "eo_large_v2.zip",
-    "eo_medium_v1": "eo_medium_v1.zip",
-    "eo_medium_v2": "eo_medium_v2.zip",
-    # "eo_small": "eo_small.zip",
-    "ed_large_v1": "ed_large_v1.zip",
-    "ed_medium_v1": "ed_medium_v1.zip",
-    # "ed_small": "ed_small.zip",
+    "eo_large_char_v1": "eo_large_char_v1.zip",
+    "eo_large_char_v2": "eo_large_char_v2.zip",
+    "eo_large_byte_v2": "eo_large_byte_v2.zip",
+    "eo_medium_char_v1": "eo_medium_char_v1.zip",
+    "eo_medium_char_v2": "eo_medium_char_v2.zip",
+    "eo_medium_byte_v2": "eo_medium_byte_v2.zip",
+    "ed_large": "ed_large.zip",
+    "ed_medium": "ed_medium.zip",
 }
 
 
@@ -37,33 +37,45 @@ class WhitespaceCorrector(corrector.TextCorrector):
     def available_models(cls) -> List[ModelInfo]:
         return [
             ModelInfo(
-                name="eo_large_v2",
-                description="Combines fast inference and good performance",
+                name="eo_large_byte_v2",
+                description="Byte-level model combining fast inference and good performance",
                 tags=["default", "lang::en", "arch::encoder-only", "input::byte"]
             ),
             ModelInfo(
-                name="eo_large_v1",
-                description="Combines fast inference and good performance",
+                name="eo_large_char_v2",
+                description="Character-level model combining fast inference and good performance",
                 tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
-                name="eo_medium_v2",
-                description="Encoder-only model; smaller and faster than eo_large_v2, but less accurate",
+                name="eo_large_char_v1",
+                description="Character-level model combining fast inference and good performance, "
+                "trained with a different loss than eo_large_char_v2",
+                tags=["lang::en", "arch::encoder-only", "input::char"]
+            ),
+            ModelInfo(
+                name="eo_medium_byte_v2",
+                description="Smaller and faster than eo_large_byte_v2, but less accurate",
                 tags=["lang::en", "arch::encoder-only", "input::byte"]
             ),
             ModelInfo(
-                name="eo_medium_v1",
-                description="Encoder-only model; smaller and faster than eo_large_v1, but less accurate",
+                name="eo_medium_char_v2",
+                description="Smaller and faster than eo_large_char_v2, but less accurate",
                 tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
-                name="ed_large_v1",
-                description="Similar to eo_large_v1 in size",
+                name="eo_medium_char_v1",
+                description="Smaller and faster than eo_large_char_v1, but less accurate",
+                tags=["lang::en", "arch::encoder-only", "input::char"]
+            ),
+            ModelInfo(
+                name="ed_large",
+                description="Similar to eo_large_byte_v2 in size and performance, but slower due to "
+                "its autoregressive decoder",
                 tags=["lang::en", "arch::encoder-decoder", "input::char", "output::char"]
             ),
             ModelInfo(
-                name="ed_medium_v1",
-                description="Smaller and faster than ed_large_v1, but less accurate",
+                name="ed_medium",
+                description="Smaller and faster than ed_large, but less accurate",
                 tags=["lang::en", "arch::encoder-decoder", "input::char", "output::char"]
             ),
         ]
