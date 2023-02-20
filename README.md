@@ -6,7 +6,7 @@ Correct missing or spurious whitespaces in text.
 
 This project is mainly tested with Python 3.10, but should work fine with Python 3.8 and newer versions
 
-#### From PyPi
+#### From PyPI
 
 ```bash
 pip install whitespace-correction
@@ -92,9 +92,10 @@ wsc -f path/to/input/file.txt -o output.txt
 wsc -i
 
 # start a whitespace correction server with the following endpoints:
-### /models [GET] --> list available models as json 
-### /info [GET] --> info about backend as json
-### /correct [POST] --> corrected text and runtime information as json
+### /models [GET] --> output: available models as json 
+### /info [GET] --> output: info about backend as json
+### /evaluate [POST] input: input, output, and groundtruth text --> output: evaluation metrics as json
+### /correct [POST] input: some text to correct --> output: corrected text and runtime information as json
 wsc --server <config_file>
 
 ### OPTIONS
@@ -159,10 +160,14 @@ However, you can also download our pretrained models first as zip files, put the
 and set `WHITESPACE_CORRECTION_DOWNLOAD_DIR` (or the `download_dir` parameter above) to this directory.
 
 Download links:
-- [eo_large_v1](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/eo_large_v1.zip)
-- [eo_medium_v1](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/eo_medium_v1.zip)
-- [ed_large_v1](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/ed_large_v1.zip)
-- [ed_medium_v1](https://ad-publications.informatik.uni-freiburg.de/EMNLP_whitespace_correction_transformer_BHW_2022.materials/ed_medium_v1.zip)
+- [eo_large_char_v1](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_large_char_v1.zip)
+- [eo_large_char_v2](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_large_char_v2.zip)
+- [eo_large_byte_v2](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_large_byte_v2.zip)
+- [eo_medium_char_v1](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_char_v1.zip)
+- [eo_medium_char_v2](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_char_v2.zip)
+- [eo_medium_byte_v2](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_byte_v2.zip)
+- [ed_large](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/ed_large.zip)
+- [ed_medium](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/ed_medium.zip)
 
 #### Use own model
 
@@ -197,7 +202,7 @@ You can also run this project using docker. Build the image using
 
 If you have an older GPU build the image using
 
-`docker build -t whitespace-correction` -f Dockerfile.old .`
+`docker build -t whitespace-correction -f Dockerfile.old .`
 
 By default, the entrypoint is set to the `wsc` command, 
 so you can use the Docker setup like described [here](#from-command-line) earlier.
@@ -223,7 +228,7 @@ docker run -v $(pwd)/.cache:/wsc/cache -v $(pwd)/.download:/wsc/download \
 # --gpus all --ipc=host --ulimit memlock=-1 --ulimit stack=67108864
 
 Note
------
+----
 Make sure you have docker version >= 19.03, a nvidia driver
 and the nvidia container toolkit installed (see https://github.com/NVIDIA/nvidia-docker)
 if you want to run the container with GPU support.
