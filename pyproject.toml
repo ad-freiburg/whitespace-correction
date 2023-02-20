@@ -1,6 +1,6 @@
 [project]
 name = "whitespace_correction"
-version = "0.1.1"
+version = "0.1.2"
 description = "Correct missing or spurious whitespaces in text."
 authors = [
     { name = "Sebastian Walter", email = "swalter@cs.uni-freiburg.de" }
@@ -20,7 +20,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "text-correction-utils>=0.1.2",
+    "text-correction-utils>=0.1.3",
     "transformers>=4.26.0"
 ]
 
