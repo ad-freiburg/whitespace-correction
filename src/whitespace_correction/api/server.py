@@ -62,13 +62,13 @@ class WhitespaceCorrectionServer(TextCorrectionServer):
 
             try:
                 seq_acc = metrics.accuracy(json["output"], json["groundtruth"])
-                f1_micro, *_ = metrics.whitespace_correction_f1(
+                (f1_micro, *_), _ = metrics.whitespace_correction_f1(
                     json["input"],
                     json["output"],
                     json["groundtruth"],
                     sequence_averaged=False
                 )
-                f1_seq_avg, *_ = metrics.whitespace_correction_f1(
+                (f1_seq_avg, *_), infos = metrics.whitespace_correction_f1(
                     json["input"],
                     json["output"],
                     json["groundtruth"],
@@ -88,5 +88,9 @@ class WhitespaceCorrectionServer(TextCorrectionServer):
                     {"name": "Sequence accuracy", "score": seq_acc * 100, "largerIsBetter": True, "precision": 2},
                     {"name": "Micro-averaged F1", "score": f1_micro * 100, "largerIsBetter": True, "precision": 2},
                     {"name": "Sequence-averaged F1", "score": f1_seq_avg * 100, "largerIsBetter": True, "precision": 2},
+                ],
+                "info": [
+                    {"tp": tp, "fp": fp, "fn": fn}
+                    for tp, fp, fn in infos
                 ]
             })
