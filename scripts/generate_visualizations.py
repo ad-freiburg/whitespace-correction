@@ -198,11 +198,14 @@ def generate_visualizations(args: argparse.Namespace) -> None:
                 f"Self-attention layer {layer}",
                 attention_weights,
                 x_labels=characters,
-                x_label="Input characters",
+                x_label="Context",
                 y_labels_left=characters,
-                y_label_left="Input characters"
+                y_label_left="Input character"
             )
-            chart.save(os.path.join(args.save_dir, f"{cor.name}_layer_{layer}.png"))
+            chart.save(
+                os.path.join(args.save_dir, f"{cor.name}_layer_{layer}.png"),
+                scale_factor=4
+            )
         elif args.type == "attention_heads":
             for head in range(attention_weights.shape[0]):
                 logger.info(f"generating attention chart for layer {layer_name} and head {head + 1}")
@@ -210,14 +213,17 @@ def generate_visualizations(args: argparse.Namespace) -> None:
                     f"Self-attention layer {layer} head {head + 1}",
                     attention_weights[head],
                     x_labels=characters,
-                    x_label="Input characters",
+                    x_label="Context",
                     y_labels_left=characters,
-                    y_label_left="Input characters"
+                    y_label_left="Input character"
                 )
-                chart.save(os.path.join(
-                    args.save_dir,
-                    f"{cor.name}_layer_{layer}_head_{head + 1}.png"
-                ))
+                chart.save(
+                    os.path.join(
+                        args.save_dir,
+                        f"{cor.name}_layer_{layer}_head_{head + 1}.png"
+                    ),
+                    scale_factor=4
+                )
 
 
 if __name__ == "__main__":

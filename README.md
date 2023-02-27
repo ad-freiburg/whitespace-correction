@@ -161,13 +161,14 @@ and set `WHITESPACE_CORRECTION_DOWNLOAD_DIR` (or the `download_dir` parameter ab
 
 Download links:
 - [eo_large_char_v1](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_large_char_v1.zip)
-- [eo_large_char_v2](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_large_char_v2.zip)
-- [eo_large_byte_v2](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_large_byte_v2.zip)
+- [eo_large_char](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_large_char_v2.zip)
+- [eo_large_byte](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_large_byte_v2.zip)
 - [eo_medium_char_v1](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_char_v1.zip)
-- [eo_medium_char_v2](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_char_v2.zip)
-- [eo_medium_byte_v2](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_byte_v2.zip)
-- [ed_large](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/ed_large.zip)
-- [ed_medium](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/ed_medium.zip)
+- [eo_medium_char](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_char_v2.zip)
+- [eo_medium_byte](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_byte_v2.zip)
+- [eo_huge_byte](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_huge_byte_v2.zip)
+- [ed_large_char](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/ed_large_v1.zip)
+- [ed_medium_char](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/ed_medium_v1.zip)
 
 #### Use own model
 

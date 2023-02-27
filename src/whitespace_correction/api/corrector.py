@@ -20,13 +20,14 @@ _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
     "ACL_whitespace_correction_transformer_BHW_2023.materials"
 _NAME_TO_ZIP = {
     "eo_large_char_v1": "eo_large_char_v1.zip",
-    "eo_large_char_v2": "eo_large_char_v2.zip",
-    "eo_large_byte_v2": "eo_large_byte_v2.zip",
+    "eo_large_char": "eo_large_char_v2.zip",
+    "eo_large_byte": "eo_large_byte_v2.zip",
+    "eo_huge_byte": "eo_huge_byte_v2.zip",
     "eo_medium_char_v1": "eo_medium_char_v1.zip",
-    "eo_medium_char_v2": "eo_medium_char_v2.zip",
-    "eo_medium_byte_v2": "eo_medium_byte_v2.zip",
-    "ed_large": "ed_large.zip",
-    "ed_medium": "ed_medium.zip",
+    "eo_medium_char": "eo_medium_char_v2.zip",
+    "eo_medium_byte": "eo_medium_byte_v2.zip",
+    "ed_large_char": "ed_large_v1.zip",
+    "ed_medium_char": "ed_medium_v1.zip",
 }
 
 
@@ -37,29 +38,34 @@ class WhitespaceCorrector(corrector.TextCorrector):
     def available_models(cls) -> List[ModelInfo]:
         return [
             ModelInfo(
-                name="eo_large_byte_v2",
+                name="eo_large_byte",
                 description="Byte-level model combining fast inference and good performance",
                 tags=["default", "lang::en", "arch::encoder-only", "input::byte"]
             ),
             ModelInfo(
-                name="eo_large_char_v2",
+                name="eo_large_char",
                 description="Character-level model combining fast inference and good performance",
                 tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
                 name="eo_large_char_v1",
                 description="Character-level model combining fast inference and good performance, "
-                "trained with a different loss than eo_large_char_v2",
+                "trained with a different loss than eo_large_char",
                 tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
-                name="eo_medium_byte_v2",
-                description="Smaller and faster than eo_large_byte_v2, but less accurate",
+                name="eo_huge_byte",
+                description="Larger and slower than eo_large_byte, but also more accuracte",
                 tags=["lang::en", "arch::encoder-only", "input::byte"]
             ),
             ModelInfo(
-                name="eo_medium_char_v2",
-                description="Smaller and faster than eo_large_char_v2, but less accurate",
+                name="eo_medium_byte",
+                description="Smaller and faster than eo_large_byte, but less accurate",
+                tags=["lang::en", "arch::encoder-only", "input::byte"]
+            ),
+            ModelInfo(
+                name="eo_medium_char",
+                description="Smaller and faster than eo_large_char, but less accurate",
                 tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
@@ -68,13 +74,13 @@ class WhitespaceCorrector(corrector.TextCorrector):
                 tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
-                name="ed_large",
-                description="Similar to eo_large_byte_v2 in size and performance, but slower due to "
+                name="ed_large_char",
+                description="Similar to eo_large_byte in size and performance, but slower due to "
                 "its autoregressive decoder",
                 tags=["lang::en", "arch::encoder-decoder", "input::char", "output::char"]
             ),
             ModelInfo(
-                name="ed_medium",
+                name="ed_medium_char",
                 description="Smaller and faster than ed_large, but less accurate",
                 tags=["lang::en", "arch::encoder-decoder", "input::char", "output::char"]
             ),
