@@ -1,0 +1,29 @@
+tokenize:
+  type: byte
+  groups: code_points
+  pad_to_multiple_of: 32
+special:
+  tokens: 
+    - <bos>
+    - <eos>
+    - <pad>
+    - <mask>
+    - <lang:unk>
+    - <lang:en>
+    - <lang:de>
+    - <lang:es>
+    - <lang:fr>
+    - <lang:pt>
+    - <lang:it>
+  pad: <pad>
+  prefix: [<bos>]
+  suffix: [<eos>]
+language:
+  default_language: <lang:unk>
+  languages:
+    - <lang:en>
+    - <lang:de>
+    - <lang:es>
+    - <lang:fr>
+    - <lang:pt>
+    - <lang:it>

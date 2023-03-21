@@ -1,0 +1,105 @@
+experiment:
+  name: env(EXPERIMENT_NAME)
+
+seed: 22
+
+input_tokenizer: file(tokenizers/byte_multi.yaml)
+
+model:
+  type: encoder_with_head
+  embedding:
+    type: standard
+    embedding_dim: env(DIM:768)
+    dropout: 0.1
+    mode: add_norm
+    use_8bit: env(USE_8BIT:False)
+    positional_embeddings: sinusoidal
+    max_length: env(MAX_LENGTH:512)
+  encoder:
+    type: grouping
+    group_first: true
+    group_name: code_point_groups
+    group_padding_mask: padding_mask
+    group_lengths: lengths
+    encoder:
+      type: transformer
+      dim: env(DIM:768)
+      num_layers: env(NUM_LAYERS:18)
+      heads: eval(env(DIM:768) // 64)
+      ffw_dim: eval(env(DIM:768) * 4)
+      dropout: 0.1
+  head:
+    type: sequence_classification
+    dim: env(DIM:768)
+    num_layers: 1
+    dropout: 0.1
+    num_classes: 3
+
+train:
+  mixed_precision: env(MIXED_PRECISION:true)
+  mixed_precision_dtype: env(MIXED_PRECISION_DTYPE:fp16)
+  clip_grad_norm: env(CLIP_GRAD_NORM:1.0)
+  num_epochs: env(NUM_EPOCHS:3)
+  num_threads: eval(env(THREADS:None) or len(os.sched_getaffinity(0)))
+  eval_interval: eval(1 / env(EVAL_PER_EPOCH:10))
+  log_interval: eval(1 / env(LOG_PER_EPOCH:100))
+  loss: file(losses/env(LOSS:focal).yaml)
+  optimizer:
+    type: adamw
+    lr: env(LR:0.00005)
+    optim_bits: eval(8 if env(USE_8BIT:False) else 32)
+    weight_decay: 0.01
+  lr_scheduler:
+    type: cosine_with_warmup
+    warmup_steps: env(WARMUP_STEPS:0.01)
+  metrics:
+    whitespace_correction:
+      max_items: 4
+  data:
+    strategy: weighted
+    shuffle: true
+    sort: true
+    buffer_size: env(BATCH_LIMIT:32)
+    prefetch_factor: env(PREFETCH_FACTOR:2048)
+    num_threads: eval(env(THREADS:None) or len(os.sched_getaffinity(0)) // 2)
+    batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
+    batch_limit_type: padded_item_size
+    default_language: <lang:unk>
+    pipeline:
+      preprocessing: file(preprocessings/whitespace_corruption_byte_multi.yaml)
+      labeling:
+        type: whitespace_correction
+        tokenizer: file(tokenizers/byte_multi.yaml)
+      tokenizer: file(tokenizers/byte_multi.yaml)
+    sources:
+      - type: file
+        path: abspath(env(EN_DATA_FILE))
+        # preprocessing: file(preprocessings/en_text_corruption.yaml)
+        # temp_dir: abspath(env(TMP))
+        language: <lang:en>
+      - type: file
+        path: abspath(env(DE_DATA_FILE))
+        # preprocessing: file(preprocessings/de_text_corruption.yaml)
+        # temp_dir: abspath(env(TMP))
+        language: <lang:de>
+      - type: file
+        path: abspath(env(FR_DATA_FILE))
+        # preprocessing: file(preprocessings/fr_text_corruption.yaml)
+        # temp_dir: abspath(env(TMP))
+        language: <lang:fr>
+      - type: file
+        path: abspath(env(IT_DATA_FILE))
+        # preprocessing: file(preprocessings/it_text_corruption.yaml)
+        # temp_dir: abspath(env(TMP))
+        language: <lang:it>
+      - type: file
+        path: abspath(env(ES_DATA_FILE))
+        # preprocessing: file(preprocessings/es_text_corruption.yaml)
+        # temp_dir: abspath(env(TMP))
+        language: <lang:es>
+      - type: file
+        path: abspath(env(PT_DATA_FILE))
+        # preprocessing: file(preprocessings/pt_text_corruption.yaml)
+        # temp_dir: abspath(env(TMP))
+        language: <lang:pt>
+    val: env(VAL_LIMIT:10000)
