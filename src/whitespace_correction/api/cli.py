@@ -1,5 +1,5 @@
 from io import TextIOWrapper
-from typing import Any, Iterator, Optional, Union
+from typing import Iterator, Optional, Union
 
 from text_correction_utils.api.cli import TextCorrectionCli
 from text_correction_utils import data
@@ -15,14 +15,6 @@ class WhitespaceCorrectionCli(TextCorrectionCli):
 
     def version(self) -> str:
         return version.__version__
-
-    def format_output(self, pred: Any, ipt: data.InferenceData, lang: Optional[str]) -> str:
-        if self.args.output_format == "text":
-            return str(pred)
-        else:
-            assert lang is not None or ipt.language is not None
-            lang = lang if ipt.language is None else ipt.language
-            return f"{pred}\t{lang}"
 
     def correct_iter(
         self,
