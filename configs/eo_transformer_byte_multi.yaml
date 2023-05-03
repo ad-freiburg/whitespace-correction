@@ -40,7 +40,6 @@ train:
   mixed_precision_dtype: env(MIXED_PRECISION_DTYPE:fp16)
   clip_grad_norm: env(CLIP_GRAD_NORM:1.0)
   num_epochs: env(NUM_EPOCHS:3)
-  num_threads: eval(env(THREADS:None) or len(os.sched_getaffinity(0)))
   eval_interval: eval(1 / env(EVAL_PER_EPOCH:10))
   log_interval: eval(1 / env(LOG_PER_EPOCH:100))
   loss: file(losses/env(LOSS:focal).yaml)
@@ -60,7 +59,7 @@ train:
     shuffle: true
     sort: true
     buffer_size: env(BATCH_LIMIT:32)
-    prefetch_factor: env(PREFETCH_FACTOR:2048)
+    prefetch_factor: env(PREFETCH_FACTOR:1024)
     num_threads: eval(env(THREADS:None) or len(os.sched_getaffinity(0)) // 2)
     batch_limit: eval(env(MAX_LENGTH:512) * env(BATCH_LIMIT:32))
     batch_limit_type: padded_item_size
@@ -73,33 +72,33 @@ train:
       tokenizer: file(tokenizers/byte_multi.yaml)
     sources:
       - type: file
-        path: abspath(env(EN_DATA_FILE))
-        # preprocessing: file(preprocessings/en_text_corruption.yaml)
+        path: env(EN_DATA_FILE:datasets/wikidump_en.txt)
+        preprocessing: file(preprocessings/en_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:en>
       - type: file
-        path: abspath(env(DE_DATA_FILE))
-        # preprocessing: file(preprocessings/de_text_corruption.yaml)
+        path: env(DE_DATA_FILE:datasets/wikidump_de.txt)
+        preprocessing: file(preprocessings/de_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:de>
       - type: file
-        path: abspath(env(FR_DATA_FILE))
-        # preprocessing: file(preprocessings/fr_text_corruption.yaml)
+        path: env(FR_DATA_FILE:datasets/wikidump_fr.txt)
+        preprocessing: file(preprocessings/fr_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:fr>
       - type: file
-        path: abspath(env(IT_DATA_FILE))
-        # preprocessing: file(preprocessings/it_text_corruption.yaml)
+        path: env(IT_DATA_FILE:datasets/wikidump_it.txt)
+        preprocessing: file(preprocessings/it_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:it>
       - type: file
-        path: abspath(env(ES_DATA_FILE))
-        # preprocessing: file(preprocessings/es_text_corruption.yaml)
+        path: env(ES_DATA_FILE:datasets/wikidump_es.txt)
+        preprocessing: file(preprocessings/es_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:es>
       - type: file
-        path: abspath(env(PT_DATA_FILE))
-        # preprocessing: file(preprocessings/pt_text_corruption.yaml)
+        path: env(PT_DATA_FILE:datasets/wikidump_pt.txt)
+        preprocessing: file(preprocessings/pt_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:pt>
     val: env(VAL_LIMIT:10000)
