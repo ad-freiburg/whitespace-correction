@@ -73,32 +73,26 @@ train:
     sources:
       - type: file
         path: env(EN_DATA_FILE:datasets/wikidump_en.txt)
-        preprocessing: file(preprocessings/en_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:en>
       - type: file
         path: env(DE_DATA_FILE:datasets/wikidump_de.txt)
-        preprocessing: file(preprocessings/de_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:de>
       - type: file
         path: env(FR_DATA_FILE:datasets/wikidump_fr.txt)
-        preprocessing: file(preprocessings/fr_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:fr>
       - type: file
         path: env(IT_DATA_FILE:datasets/wikidump_it.txt)
-        preprocessing: file(preprocessings/it_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:it>
       - type: file
         path: env(ES_DATA_FILE:datasets/wikidump_es.txt)
-        preprocessing: file(preprocessings/es_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:es>
       - type: file
         path: env(PT_DATA_FILE:datasets/wikidump_pt.txt)
-        preprocessing: file(preprocessings/pt_text_corruption.yaml)
         # temp_dir: abspath(env(TMP))
         language: <lang:pt>
     val: env(VAL_LIMIT:10000)
