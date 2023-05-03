@@ -59,7 +59,7 @@ class EncoderWithHead(Model):
         token_ids: torch.Tensor,
         **kwargs: Any
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        emb, pos_emb = self.embedding(token_ids, **kwargs)
+        emb, pos_emb, kwargs = self.embedding(token_ids, **kwargs)
         enc, kwargs = self.encoder(emb, pos=pos_emb, **kwargs)
         output = self.head(enc, **kwargs)
         return output, self.encoder.additional_losses()
