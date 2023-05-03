@@ -1,5 +1,5 @@
 experiment:
-  name: env(EXPERIMENT_NAME)
+  name: env(EXPERIMENT_NAME:multi_byte)
 
 seed: 22
 
