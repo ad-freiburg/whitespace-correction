@@ -58,6 +58,7 @@ train:
     strategy: weighted
     shuffle: true
     sort: true
+    limit: env(TRAIN_LIMIT:None)
     buffer_size: env(BATCH_LIMIT:32)
     prefetch_factor: env(PREFETCH_FACTOR:1024)
     num_threads: eval(env(THREADS:None) or len(os.sched_getaffinity(0)) // 2)
