@@ -1,0 +1,2 @@
+type: multi_layer
+loss: file(focal.yaml)

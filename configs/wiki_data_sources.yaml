@@ -1,0 +1,30 @@
+- type: file
+  path: env(EN_DATA_FILE:datasets/wikidump_en.clean.dedup.txt)
+  preprocessing: file(preprocessings/en_text_corruption.yaml)
+  # temp_dir: abspath(env(TMP))
+  language: (lang:en)
+- type: file
+  path: env(DE_DATA_FILE:datasets/wikidump_de.clean.dedup.txt)
+  preprocessing: file(preprocessings/de_text_corruption.yaml)
+  # temp_dir: abspath(env(TMP))
+  language: (lang:de)
+- type: file
+  path: env(FR_DATA_FILE:datasets/wikidump_fr.clean.dedup.txt)
+  preprocessing: file(preprocessings/fr_text_corruption.yaml)
+  # temp_dir: abspath(env(TMP))
+  language: (lang:fr)
+- type: file
+  path: env(IT_DATA_FILE:datasets/wikidump_it.clean.dedup.txt)
+  preprocessing: file(preprocessings/it_text_corruption.yaml)
+  # temp_dir: abspath(env(TMP))
+  language: (lang:it)
+- type: file
+  path: env(ES_DATA_FILE:datasets/wikidump_es.clean.dedup.txt)
+  preprocessing: file(preprocessings/es_text_corruption.yaml)
+  # temp_dir: abspath(env(TMP))
+  language: (lang:es)
+- type: file
+  path: env(PT_DATA_FILE:datasets/wikidump_pt.clean.dedup.txt)
+  preprocessing: file(preprocessings/pt_text_corruption.yaml)
+  # temp_dir: abspath(env(TMP))
+  language: (lang:pt)

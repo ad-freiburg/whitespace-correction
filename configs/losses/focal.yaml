@@ -1,3 +1,5 @@
-type: sequence_focal
-ignore_index: -1
-gamma: 2
+type: sequence
+loss:
+  type: focal
+  ignore_index: -1
+  gamma: 2

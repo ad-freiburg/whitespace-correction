@@ -1,0 +1,26 @@
+type: encoder_with_head
+embedding:
+  type: standard
+  embedding_dim: env(DIM:768)
+  dropout: 0.1
+  mode: norm
+  positional_embeddings: sinusoidal
+  max_length: eval(env(MAX_LENGTH:512) * 4)
+  group_embeddings: before_pos
+  group_name: code_point_groups
+  group_padding_mask: padding_mask
+  group_lengths: lengths
+encoder:
+  type: transformer
+  dim: env(DIM:768)
+  num_layers: env(NUM_ENCODER_LAYERS:12)
+  heads: eval(env(DIM:768) // 64)
+  ffw_dim: eval(env(DIM:768) * 4)
+  with_pos: attention
+  dropout: 0.1
+head:
+  type: sequence_classification
+  dim: env(DIM:768)
+  num_layers: 3
+  dropout: 0.1
+  num_classes: 3

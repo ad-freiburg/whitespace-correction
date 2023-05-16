@@ -1,0 +1,4 @@
+- type: file
+  path: env(EN_DATA_FILE:datasets/training_mixed_ocr+spelling_en.txt)
+  # temp_dir: abspath(env(TMP))
+  language: (lang:en)

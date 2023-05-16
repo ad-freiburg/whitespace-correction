@@ -1,3 +1,5 @@
+type: chain
+configs:
 - type: clean
 - type: normalize
   scheme: NFKC

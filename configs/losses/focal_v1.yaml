@@ -1,4 +1,0 @@
-type: sequence_focal
-weights: [1, 5, 5]
-ignore_index: -1
-gamma: 2

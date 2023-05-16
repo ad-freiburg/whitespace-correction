@@ -1,3 +1,0 @@
-type: sequence_cross_entropy
-weights: [1, 5, 5]
-ignore_index: -1
