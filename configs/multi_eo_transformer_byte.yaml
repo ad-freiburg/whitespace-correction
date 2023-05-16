@@ -29,6 +29,7 @@ train:
   metrics:
     whitespace_correction:
       max_items: 8
+      multi_layer: env(MULTI_LAYER:false)
   data:
     strategy: weighted
     shuffle: true

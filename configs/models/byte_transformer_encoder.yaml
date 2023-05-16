@@ -1,4 +1,6 @@
 type: encoder_with_head
+multi_layer: env(MULTI_LAYER:false)
+start_layer: eval(env(NUM_ENCODER_LAYERS:12) // 2)
 embedding:
   type: standard
   embedding_dim: env(DIM:768)

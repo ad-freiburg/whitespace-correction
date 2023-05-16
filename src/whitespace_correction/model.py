@@ -48,11 +48,15 @@ class EncoderWithHead(Model):
         embedding: Embedding,
         encoder: Encoder,
         head: Head,
+        multi_layer: bool = False,
+        start_layer: int = 0
     ):
         super().__init__()
         self.embedding = embedding
         self.encoder = encoder
         self.head = head
+        self.multi_layer = multi_layer
+        self.start_layer = start_layer
 
     def forward(
         self,
@@ -60,7 +64,14 @@ class EncoderWithHead(Model):
         **kwargs: Any
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
         emb, pos_emb, kwargs = self.embedding(token_ids, **kwargs)
-        enc, kwargs = self.encoder(emb, pos=pos_emb, **kwargs)
+        enc, kwargs = self.encoder(
+            emb,
+            pos=pos_emb,
+            return_intermediate=self.multi_layer,
+            **kwargs
+        )
+        if self.multi_layer:
+            enc = enc[self.start_layer:]
         output = self.head(enc, **kwargs)
         return output, self.encoder.additional_losses()
 
@@ -205,10 +216,10 @@ def model_from_config(
         head = head_from_config(cfg["head"])
         return PretrainedEncoderWithHead(encoder, head)
     elif model_type == "encoder_with_head":
-        embedding = embedding_from_config(cfg["embedding"], input_tokenizer)
-        encoder = encoder_from_config(cfg["encoder"])
-        head = head_from_config(cfg["head"])
-        return EncoderWithHead(embedding, encoder, head)
+        embedding = embedding_from_config(cfg.pop("embedding"), input_tokenizer)
+        encoder = encoder_from_config(cfg.pop("encoder"))
+        head = head_from_config(cfg.pop("head"))
+        return EncoderWithHead(embedding, encoder, head, **cfg)
     elif model_type == "encoder_decoder_with_head":
         encoder_embedding = embedding_from_config(cfg["encoder_embedding"], input_tokenizer)
         encoder = encoder_from_config(cfg["encoder"])
