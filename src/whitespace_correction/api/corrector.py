@@ -146,6 +146,9 @@ class WhitespaceCorrector(corrector.TextCorrector):
             self.output_tokenizer = None
 
         self._encoder_only = self.cfg["model"]["type"].endswith("encoder_with_head")
+        if self._encoder_only:
+            # disable multi layer during inference
+            self.cfg["model"]["multi_layer"] = False
         self._pfx = self.input_tokenizer.num_prefix_tokens()
         self._sfx = self.input_tokenizer.num_suffix_tokens()
 
