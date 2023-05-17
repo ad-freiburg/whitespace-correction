@@ -122,7 +122,6 @@ class WhitespaceCorrector(corrector.TextCorrector):
     def context_length(self) -> int:
         raise NotImplementedError
 
-    @property
     def supported_languages(self) -> Optional[List[str]]:
         lang_cfg = self.cfg["input_tokenizer"].get("language")
         if lang_cfg is None:
