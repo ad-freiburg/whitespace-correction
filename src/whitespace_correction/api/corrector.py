@@ -131,8 +131,8 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
     def __init__(
         self,
-            model_dir: str,
-            device: Union[str, int]
+        model_dir: str,
+        device: Union[str, int]
     ) -> None:
         super().__init__(model_dir, device)
         precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
@@ -146,9 +146,6 @@ class WhitespaceCorrector(corrector.TextCorrector):
             self.output_tokenizer = None
 
         self._encoder_only = self.cfg["model"]["type"].endswith("encoder_with_head")
-        if self._encoder_only:
-            # disable multi layer during inference
-            self.cfg["model"]["multi_layer"] = False
         self._pfx = self.input_tokenizer.num_prefix_tokens()
         self._sfx = self.input_tokenizer.num_suffix_tokens()
 
@@ -187,6 +184,9 @@ class WhitespaceCorrector(corrector.TextCorrector):
     def _inference(self, inputs: Dict[str, Any]) -> Any:
         if self._encoder_only:
             outputs, _ = self.model(**inputs)
+            if self.cfg["model"].get("multi_layer", False):
+                # only use last layer predictions during inference
+                outputs = outputs[-1]
             return outputs
 
         assert isinstance(self.model, EncoderDecoderWithHead)
