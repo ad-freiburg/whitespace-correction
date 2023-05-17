@@ -173,7 +173,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         }
 
     def _prepare_batch(self, batch: data.InferenceBatch) -> Dict[str, Any]:
-        token_ids_np, pad_mask_np, lengths, info = batch.tensors
+        token_ids_np, pad_mask_np, lengths, info = batch.tensors()
         inputs = {
             "token_ids": torch.from_numpy(token_ids_np).to(non_blocking=True, device=self.device),
             "padding_mask": torch.from_numpy(pad_mask_np).to(non_blocking=True, device=self.device),
