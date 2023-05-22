@@ -118,10 +118,6 @@ class WhitespaceCorrector(corrector.TextCorrector):
         else:
             raise ValueError(f"unknown model type: {self.cfg['model']['type']}")
 
-    @property
-    def context_length(self) -> int:
-        raise NotImplementedError
-
     def supported_languages(self) -> Optional[List[str]]:
         lang_cfg = self.cfg["input_tokenizer"].get("language")
         if lang_cfg is None:
@@ -134,6 +130,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         model_dir: str,
         device: Union[str, int]
     ) -> None:
+        self._context_length = 1 / 8
         super().__init__(model_dir, device)
         precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
         self.set_precision(precision)
@@ -148,21 +145,30 @@ class WhitespaceCorrector(corrector.TextCorrector):
         self._encoder_only = self.cfg["model"]["type"].endswith("encoder_with_head")
         self._pfx = self.input_tokenizer.num_prefix_tokens()
         self._sfx = self.input_tokenizer.num_suffix_tokens()
+        self._max_length = self.max_length - self._pfx - self._sfx
 
     def _build_inference_loader_config(self) -> Dict[str, Any]:
-        input_tokenizer = tokenization.Tokenizer.from_config(self.cfg["input_tokenizer"])
-        pfx = input_tokenizer.num_prefix_tokens()
-        sfx = input_tokenizer.num_suffix_tokens()
+        pfx = self.input_tokenizer.num_prefix_tokens()
+        sfx = self.input_tokenizer.num_suffix_tokens()
 
         # use the training max sequence length here, even though some models work with arbitrary long sequences
         # (e.g. LSTM), for better accuracy
         max_length = self.max_length - pfx - sfx
-        window_size = math.ceil(0.75 * max_length)
-        context_size = (max_length - window_size) // 2
+        if isinstance(self._context_length, float):
+            assert 0 <= 2 * self._context_length < 1.0, \
+                f"context length {self._context_length} must be between 0 and 0.5"
+            context_length = math.floor(self._context_length * max_length)
+        elif isinstance(self._context_length, int):
+            assert self._context_length * 2 < max_length, \
+                f"context length {self._context_length} is too large for max length {max_length}"
+            context_length = self._context_length
+        else:
+            raise RuntimeError(f"invalid context length, must be int or float: {self._context_length}")
+
         if self.cfg["input_tokenizer"]["tokenize"]["type"] in {"byte", "byt5"}:
-            window_cfg = {"type": "byte", "max_bytes": max_length, "context_bytes": context_size}
+            window_cfg = {"type": "byte", "max_bytes": max_length, "context_bytes": context_length}
         elif self.cfg["input_tokenizer"]["tokenize"]["type"] == "character":
-            window_cfg = {"type": "character", "max_chars": max_length, "context_chars": context_size}
+            window_cfg = {"type": "character", "max_chars": max_length, "context_chars": context_length}
         else:
             raise ValueError("the input tokenizer must be of type 'char' or 'byte' for whitespace correction")
 
@@ -502,3 +508,9 @@ class WhitespaceCorrector(corrector.TextCorrector):
                 "inference with {precision} might give unexpected results"
             )
         return super().set_precision(precision)
+
+    def set_context_length(self, context_length: Union[int, float]) -> None:
+        assert isinstance(context_length, (int, float)), \
+            "context must be a positive integer or a float"
+        self._context_length = context_length
+        self._inference_loader_cfg = self._build_inference_loader_config()

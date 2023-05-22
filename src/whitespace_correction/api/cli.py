@@ -3,6 +3,7 @@ from typing import Iterator, Optional, Union
 
 from text_correction_utils.api.cli import TextCorrectionCli
 from text_correction_utils import data
+from text_correction_utils.api.corrector import TextCorrector
 
 from whitespace_correction import version
 from whitespace_correction.api.corrector import WhitespaceCorrector
@@ -12,6 +13,12 @@ from whitespace_correction.api.server import WhitespaceCorrectionServer
 class WhitespaceCorrectionCli(TextCorrectionCli):
     text_corrector_cls = WhitespaceCorrector
     text_correction_server_cls = WhitespaceCorrectionServer
+
+    def setup_corrector(self) -> TextCorrector:
+        cor = super().setup_corrector()
+        assert isinstance(cor, WhitespaceCorrector)
+        cor.set_context_length(self.args.context_length)
+        return cor
 
     def version(self) -> str:
         return version.__version__
@@ -56,5 +63,12 @@ def main():
     parser = WhitespaceCorrectionCli.parser(
         "Whitespace correction",
         "Correct missing or spurious whitespaces in text"
+    )
+    parser.add_argument(
+        "--context-length",
+        type=int,
+        default=64,
+        help="Too long sequences will be split into smaller windows, "
+        "overlapping by this number of tokens"
     )
     WhitespaceCorrectionCli(parser.parse_args()).run()
