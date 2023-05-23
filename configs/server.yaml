@@ -10,3 +10,5 @@ models:
   # directory path (you can use special configuration operators,
   # e.g. env(ENV_VAR) to load env variables)
   - env(EXPERIMENT)
+batch_size: env(BATCH_SIZE:16)
+# batch_max_tokens: env(BATCH_MAX_TOKENS:8192)

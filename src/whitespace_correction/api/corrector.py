@@ -130,7 +130,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         model_dir: str,
         device: Union[str, int]
     ) -> None:
-        self._context_length = 1 / 8
+        self._context_length = 1 / 16
         super().__init__(model_dir, device)
         precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
         self.set_precision(precision)

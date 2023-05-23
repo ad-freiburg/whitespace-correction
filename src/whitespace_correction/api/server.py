@@ -15,6 +15,11 @@ class WhitespaceCorrectionServer(TextCorrectionServer):
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
+        self.batch_size = int(self.config.get("batch_size", 16))
+        if "batch_max_tokens" in self.config:
+            self.batch_max_tokens = int(self.config["batch_max_tokens"])
+        else:
+            self.batch_max_tokens = None
 
         @self.server.route(f"{self.base_url}/correct", methods=["POST"])
         def _correct() -> Response:
@@ -36,7 +41,11 @@ class WhitespaceCorrectionServer(TextCorrectionServer):
                         ((t, None) for t in json["text"]),
                         size_fn=lambda e: len(e[0].encode("utf8"))
                     )
-                    corrected = list(cor.correct_iter(iter))
+                    corrected = list(cor.correct_iter(
+                        iter,
+                        batch_size=self.batch_size,
+                        batch_max_tokens=self.batch_max_tokens
+                    ))
                     end = time.perf_counter()
                     b = iter.total_size
                     s = end - start
