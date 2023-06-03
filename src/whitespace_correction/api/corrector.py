@@ -6,7 +6,6 @@ from typing import Any, Dict, List, Tuple, Optional, Union, Iterator
 
 import torch
 from torch import nn
-from torch import autocast
 
 from whitespace_correction.model import model_from_config, EncoderDecoderWithHead
 
@@ -22,7 +21,7 @@ _NAME_TO_ZIP = {
     "eo_large_char_v1": "eo_large_char_v1.zip",
     "eo_large_char": "eo_large_char_v2.zip",
     "eo_large_byte": "eo_large_byte_v2.zip",
-    "eo_huge_byte": "eo_huge_byte_v2.zip",
+    "eo_larger_byte": "eo_huge_byte_v2.zip",
     "eo_medium_char_v1": "eo_medium_char_v1.zip",
     "eo_medium_char": "eo_medium_char_v2.zip",
     "eo_medium_byte": "eo_medium_byte_v2.zip",
@@ -39,22 +38,22 @@ class WhitespaceCorrector(corrector.TextCorrector):
         return [
             ModelInfo(
                 name="eo_large_byte",
-                description="Byte-level model combining fast inference and good performance",
+                description="Byte-level model combining fast inference and good quality",
                 tags=["default", "lang::en", "arch::encoder-only", "input::byte"]
             ),
             ModelInfo(
                 name="eo_large_char",
-                description="Character-level model combining fast inference and good performance",
+                description="Character-level model combining fast inference and good quality",
                 tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
                 name="eo_large_char_v1",
-                description="Character-level model combining fast inference and good performance, "
+                description="Character-level model combining fast inference and good quality, "
                 "trained with a different loss than eo_large_char",
                 tags=["lang::en", "arch::encoder-only", "input::char"]
             ),
             ModelInfo(
-                name="eo_huge_byte",
+                name="eo_larger_byte",
                 description="Larger and slower than eo_large_byte, but also more accuracte",
                 tags=["lang::en", "arch::encoder-only", "input::byte"]
             ),
@@ -75,7 +74,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
             ),
             ModelInfo(
                 name="ed_large_char",
-                description="Similar to eo_large_byte in size and performance, but slower due to "
+                description="Similar to eo_large_byte in size and quality, but slower due to "
                 "its autoregressive decoder",
                 tags=["lang::en", "arch::encoder-decoder", "input::char", "output::char"]
             ),
@@ -132,12 +131,10 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
     def __init__(
         self,
-            model_dir: str,
-            device: Union[str, int]
+        model_dir: str,
+        device: Union[str, int]
     ) -> None:
         super().__init__(model_dir, device)
-        precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
-        self.set_precision(precision)
         self.logger.debug(f"loaded model config:\n{self.cfg['model']}")
         self.logger.info(f"running {self.name} whitespace corrector on device {device_info(self.device)}")
         self.input_tokenizer = tokenization.Tokenizer.from_config(self.cfg["input_tokenizer"])
@@ -149,6 +146,9 @@ class WhitespaceCorrector(corrector.TextCorrector):
         self._encoder_only = self.cfg["model"]["type"].endswith("encoder_with_head")
         self._pfx = self.input_tokenizer.num_prefix_tokens()
         self._sfx = self.input_tokenizer.num_suffix_tokens()
+
+        precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
+        self.set_precision(precision)
 
     def _build_inference_loader_config(self) -> Dict[str, Any]:
         input_tokenizer = tokenization.Tokenizer.from_config(self.cfg["input_tokenizer"])
@@ -493,10 +493,17 @@ class WhitespaceCorrector(corrector.TextCorrector):
             return (output.text for output in outputs)
 
     def set_precision(self, precision: str) -> None:
-        training_precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
-        if precision != "fp32" and precision != training_precision:
+        if self.device.type == "cpu" and self._encoder_only and precision != "fp32":
             self.logger.warning(
-                f"this model was trained with {training_precision} precision, "
-                "inference with {precision} might give unexpected results"
+                f"got {precision} precision, but "
+                "encoder-only models only support fp32 precision on CPU"
             )
+            precision = "fp32"
+        else:
+            training_precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
+            if precision != "fp32" and precision != training_precision:
+                self.logger.warning(
+                    f"this model was trained with {training_precision} precision, "
+                    f"inference with {precision} might give unexpected results"
+                )
         return super().set_precision(precision)

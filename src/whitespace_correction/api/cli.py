@@ -53,6 +53,8 @@ class WhitespaceCorrectionCli(TextCorrectionCli):
 
 
 def main():
+    import warnings
+    warnings.filterwarnings("ignore")
     parser = WhitespaceCorrectionCli.parser(
         "Whitespace correction",
         "Correct missing or spurious whitespaces in text"
