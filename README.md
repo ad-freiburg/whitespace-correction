@@ -166,7 +166,7 @@ Download links:
 - [eo_medium_char_v1](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_char_v1.zip)
 - [eo_medium_char](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_char_v2.zip)
 - [eo_medium_byte](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_medium_byte_v2.zip)
-- [eo_huge_byte](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_huge_byte_v2.zip)
+- [eo_larger_byte](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/eo_huge_byte_v2.zip)
 - [ed_large_char](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/ed_large_v1.zip)
 - [ed_medium_char](https://ad-publications.informatik.uni-freiburg.de/ACL_whitespace_correction_transformer_BHW_2023.materials/ed_medium_v1.zip)
 
