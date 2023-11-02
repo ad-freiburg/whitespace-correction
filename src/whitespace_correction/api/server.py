@@ -3,26 +3,23 @@ from typing import Dict, Any
 
 from flask import Response, jsonify, request, abort
 
-from text_correction_utils.api.server import TextCorrectionServer, Error
-from text_correction_utils.api.utils import ProgressIterator
-from text_correction_utils import metrics
+from text_utils.api.server import TextProcessingServer, Error
+from text_utils.api.utils import ProgressIterator
+from text_utils import metrics
 
 from whitespace_correction.api.corrector import WhitespaceCorrector
 
 
-class WhitespaceCorrectionServer(TextCorrectionServer):
-    text_corrector_cls = WhitespaceCorrector
+class WhitespaceCorrectionServer(TextProcessingServer):
+    text_processor_cls = WhitespaceCorrector
 
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
-        self.batch_size = int(self.config.get("batch_size", 16))
+        self.batch_size = self.config.get("batch_size", 1)
         if "batch_max_tokens" in self.config:
-            self.batch_max_tokens = int(self.config["batch_max_tokens"])
+            self.batch_max_tokens = self.config["batch_max_tokens"]
         else:
             self.batch_max_tokens = None
-
-        for cor, _ in self.text_correctors.values():
-            cor.set_precision(self.precision)
 
         @self.server.route(f"{self.base_url}/correct", methods=["POST"])
         def _correct() -> Response:
@@ -35,7 +32,7 @@ class WhitespaceCorrectionServer(TextCorrectionServer):
                 return abort(Response("missing text in json", status=400))
 
             try:
-                with self.text_corrector(json["model"]) as cor:
+                with self.text_processor(json["model"]) as cor:
                     if isinstance(cor, Error):
                         return abort(cor.to_response())
                     assert isinstance(cor, WhitespaceCorrector)

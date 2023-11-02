@@ -80,7 +80,7 @@ echo "splitthissentenceforme" | wsc
 cat "path/to/input/file.txt" | wsc > output.txt
 
 # correct a string using
-wsc -c "splitthissentenceforme"
+wsc -p "splitthissentenceforme"
 
 # correct a text file line by line and print the corrected lines
 wsc -f path/to/input/file.txt

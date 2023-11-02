@@ -1,27 +1,27 @@
 from io import TextIOWrapper
 from typing import Iterator, Optional, Union
 
-from text_correction_utils.api.cli import TextCorrectionCli
-from text_correction_utils import data
+from text_utils.api.cli import TextProcessingCli
+from text_utils import data
 
 from whitespace_correction import version
 from whitespace_correction.api.corrector import WhitespaceCorrector
 from whitespace_correction.api.server import WhitespaceCorrectionServer
 
 
-class WhitespaceCorrectionCli(TextCorrectionCli):
-    text_corrector_cls = WhitespaceCorrector
-    text_correction_server_cls = WhitespaceCorrectionServer
+class WhitespaceCorrectionCli(TextProcessingCli):
+    text_processor_cls = WhitespaceCorrector
+    text_processing_server_cls = WhitespaceCorrectionServer
 
     def version(self) -> str:
         return version.__version__
 
-    def correct_iter(
+    def process_iter(
         self,
-        corrector: WhitespaceCorrector,
+        processor: WhitespaceCorrector,
         iter: Iterator[data.InferenceData]
     ) -> Iterator[data.InferenceData]:
-        yield from corrector.correct_iter(
+        yield from processor.correct_iter(
             ((data.text, data.language) for data in iter),
             self.args.batch_size,
             self.args.batch_max_tokens,
@@ -31,14 +31,14 @@ class WhitespaceCorrectionCli(TextCorrectionCli):
             show_progress=self.args.progress
         )
 
-    def correct_file(
+    def process_file(
         self,
-        corrector: WhitespaceCorrector,
+        processor: WhitespaceCorrector,
         path: str,
         lang: Optional[str],
         out_file: Union[str, TextIOWrapper]
     ):
-        corrector.correct_file(
+        processor.correct_file(
             path,
             self.args.input_format,
             out_file,

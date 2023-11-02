@@ -4,11 +4,11 @@ from typing import Dict, Any, Optional, Tuple, Union
 import torch
 from torch import nn
 
-from text_correction_utils import tokenization
-from text_correction_utils.modules.embedding import Embedding, embedding_from_config
-from text_correction_utils.modules.encoder import Encoder, encoder_from_config
-from text_correction_utils.modules.decoder import Decoder, decoder_from_config
-from text_correction_utils.modules.head import Head, head_from_config
+from text_utils import tokenization
+from text_utils.modules.embedding import Embedding, embedding_from_config
+from text_utils.modules.encoder import Encoder, encoder_from_config
+from text_utils.modules.decoder import Decoder, decoder_from_config
+from text_utils.modules.head import Head, head_from_config
 
 from transformers import T5EncoderModel, T5Config
 
@@ -59,7 +59,7 @@ class EncoderWithHead(Model):
         token_ids: torch.Tensor,
         **kwargs: Any
     ) -> Tuple[torch.Tensor, Dict[str, torch.Tensor]]:
-        emb, pos_emb = self.embedding(token_ids, **kwargs)
+        emb, pos_emb, kwargs = self.embedding(token_ids, **kwargs)
         enc, kwargs = self.encoder(emb, pos=pos_emb, **kwargs)
         output = self.head(enc, **kwargs)
         return output, self.encoder.additional_losses()
@@ -106,7 +106,7 @@ class EncoderDecoderWithHead(Model):
         token_ids: torch.Tensor,
         **kwargs: Any
     ) -> Tuple[torch.Tensor, Dict[str, Any]]:
-        emb, pos_emb = self.encoder_embedding(token_ids, **kwargs)
+        emb, pos_emb, kwargs = self.encoder_embedding(token_ids, **kwargs)
         enc, kwargs = self.encoder(emb, pos_emb, **kwargs)
         return enc, kwargs
 
@@ -115,7 +115,7 @@ class EncoderDecoderWithHead(Model):
         token_ids: torch.Tensor,
         **kwargs: Any
     ) -> torch.Tensor:
-        emb, pos_emb = self.decoder_embedding(token_ids, **kwargs)
+        emb, pos_emb, kwargs = self.decoder_embedding(token_ids, **kwargs)
         dec, kwargs = self.decoder(
             emb,
             pos_emb,

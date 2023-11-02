@@ -25,8 +25,7 @@ model:
     num_classes: 3
 
 train:
-  mixed_precision: env(MIXED_PRECISION:true)
-  mixed_precision_dtype: env(MIXED_PRECISION_DTYPE:bfp16)
+  precision: env(PRECISION:fp16)
   clip_grad_norm: env(CLIP_GRAD_NORM:1.0)
   num_epochs: env(NUM_EPOCHS:1)
   eval_interval: eval(1 / env(EVAL_PER_EPOCH:10))
@@ -47,6 +46,7 @@ train:
     strategy: weighted
     shuffle: true
     sort: true
+    max_length: env(MAX_LENGTH:512)
     buffer_size: env(BATCH_LIMIT:32)
     prefetch_factor: env(PREFETCH_FACTOR:2048)
     num_threads: eval(env(THREADS:None) or len(os.sched_getaffinity(0)) // 2)

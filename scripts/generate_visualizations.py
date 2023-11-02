@@ -6,7 +6,7 @@ import pandas as pd
 
 from whitespace_correction.api import WhitespaceCorrector
 
-from text_correction_utils import hook, logging
+from text_utils import hook, logging
 
 from torch import nn
 import numpy as np

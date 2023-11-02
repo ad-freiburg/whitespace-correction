@@ -9,20 +9,19 @@ from torch import nn
 
 from whitespace_correction.model import model_from_config, EncoderDecoderWithHead
 
-from text_correction_utils import data, whitespace, tokenization
-from text_correction_utils.api.corrector import ModelInfo
-from text_correction_utils.api import corrector
-from text_correction_utils.api.utils import device_info, to
-from text_correction_utils.inference import IdxSelectFn, eos_stop_fn, search
+from text_utils import data, whitespace, tokenization
+from text_utils.api.processor import ModelInfo, TextProcessor
+from text_utils.api.utils import device_info, to, Device
+from text_utils.inference import IdxSelectFn, eos_stop_fn, search
 
 _BASE_URL = "https://ad-publications.informatik.uni-freiburg.de/" \
     "ACL_whitespace_correction_transformer_BHW_2023.materials"
 _NAME_TO_ZIP = {
-    "eo_large_char_v1": "eo_large_char_v1.zip",
+    "eo_large_char_v1": "eo_large_v1.zip",
     "eo_large_char": "eo_large_char_v2.zip",
     "eo_large_byte": "eo_large_byte_v2.zip",
     "eo_larger_byte": "eo_huge_byte_v2.zip",
-    "eo_medium_char_v1": "eo_medium_char_v1.zip",
+    "eo_medium_char_v1": "eo_medium_v1.zip",
     "eo_medium_char": "eo_medium_char_v2.zip",
     "eo_medium_byte": "eo_medium_byte_v2.zip",
     "ed_large_char": "ed_large_v1.zip",
@@ -30,7 +29,7 @@ _NAME_TO_ZIP = {
 }
 
 
-class WhitespaceCorrector(corrector.TextCorrector):
+class WhitespaceCorrector(TextProcessor):
     task = "whitespace correction"
 
     @classmethod
@@ -94,7 +93,11 @@ class WhitespaceCorrector(corrector.TextCorrector):
         return self.cfg["experiment"]["name"]
 
     @classmethod
-    def _model_from_config(cls, cfg: Dict[str, Any]) -> nn.Module:
+    def _model_from_config(
+        cls,
+        cfg: Dict[str, Any],
+        device: Device
+    ) -> nn.Module:
         input_tokenizer = tokenization.Tokenizer.from_config(cfg["input_tokenizer"])
         if "output_tokenizer" in cfg:
             output_tokenizer = tokenization.Tokenizer.from_config(cfg["output_tokenizer"])
@@ -108,14 +111,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
     @property
     def max_length(self) -> int:
-        if self.cfg["model"]["type"] == "pretrained_encoder_with_head":
-            return 512
-        elif self.cfg["model"]["type"] == "encoder_with_head":
-            return self.cfg["model"]["embedding"].get("max_length", 512)
-        elif self.cfg["model"]["type"] == "encoder_decoder_with_head":
-            return self.cfg["model"]["encoder_embedding"].get("max_length", 512)
-        else:
-            raise ValueError(f"unknown model type: {self.cfg['model']['type']}")
+        return self.cfg["train"]["data"].get("max_length", 512)
 
     @property
     def context_length(self) -> int:
@@ -131,10 +127,14 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
     def __init__(
         self,
-        model_dir: str,
-        device: Union[str, int]
+        model: nn.Module,
+        cfg: Dict[str, Any],
+        device: Device = "cuda"
     ) -> None:
-        super().__init__(model_dir, device)
+        super().__init__(model, cfg, device)
+        assert len(self.devices) == 1, \
+            "whitespace correction is only supported on single devices for now"
+        self.device = self.devices[0]
         self.logger.debug(f"loaded model config:\n{self.cfg['model']}")
         self.logger.info(f"running {self.name} whitespace corrector on device {device_info(self.device)}")
         self.input_tokenizer = tokenization.Tokenizer.from_config(self.cfg["input_tokenizer"])
@@ -146,9 +146,6 @@ class WhitespaceCorrector(corrector.TextCorrector):
         self._encoder_only = self.cfg["model"]["type"].endswith("encoder_with_head")
         self._pfx = self.input_tokenizer.num_prefix_tokens()
         self._sfx = self.input_tokenizer.num_suffix_tokens()
-
-        precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
-        self.set_precision(precision)
 
     def _build_inference_loader_config(self) -> Dict[str, Any]:
         input_tokenizer = tokenization.Tokenizer.from_config(self.cfg["input_tokenizer"])
@@ -173,7 +170,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         }
 
     def _prepare_batch(self, batch: data.InferenceBatch) -> Dict[str, Any]:
-        token_ids_np, pad_mask_np, lengths, info = batch.tensors
+        token_ids_np, pad_mask_np, lengths, info = batch.tensors()
         inputs = {
             "token_ids": torch.from_numpy(token_ids_np).to(non_blocking=True, device=self.device),
             "padding_mask": torch.from_numpy(pad_mask_np).to(non_blocking=True, device=self.device),
@@ -195,17 +192,17 @@ class WhitespaceCorrector(corrector.TextCorrector):
         def _decode_fn(
             token_ids: torch.Tensor,
             **kwargs: Any
-        ) -> torch.Tensor:
+        ) -> Tuple[torch.Tensor, Dict[str, Any]]:
             decoded = self.model.decode(
                 token_ids,
                 **kwargs
             )
-            return decoded
+            return decoded, {}
 
-        def _kwargs_sub_select_fn(kwargs: Dict[str, Any], mask: torch.Tensor) -> Dict[str, Any]:
+        def _kwargs_select_fn(kwargs: Dict[str, Any], mask: torch.Tensor) -> Dict[str, Any]:
             return {
                 "memories": {"encoder": kwargs["memory"][mask]},
-                "memory_padding_masks": {"encoder": kwargs["padding_mask"][mask]}
+                "memory_padding_masks": {"encoder": kwargs["memory_padding_mask"][mask]}
             }
 
         max_output_length = self.cfg["model"]["decoder_embedding"].get("max_length", 2 * self.max_length)
@@ -214,7 +211,10 @@ class WhitespaceCorrector(corrector.TextCorrector):
         # the whitespace token or the copy the corrpesonding token from
         # the input
         assert self.output_tokenizer is not None
-        eos_token_id = self.output_tokenizer.eos_token_id()
+        eos_token = "<eos>"
+        eos_token_id = self.output_tokenizer.special_token_to_id(eos_token)
+        bos_token = "<bos>"
+        bos_token_id = self.output_tokenizer.special_token_to_id(bos_token)
         ws_token_id = self.output_tokenizer.tokenize(" ").token_ids[self._pfx]
         lengths = inputs["lengths"]
         non_ws_token_ids = [
@@ -228,36 +228,44 @@ class WhitespaceCorrector(corrector.TextCorrector):
         # either copy the correct input char or add a whitespace,
         # also makes sure that no doubled whitespaces are returned
         def _custom_select_fn() -> IdxSelectFn:
-            def _select(scores: torch.Tensor, idx: int) -> Tuple[int, float]:
-                token_id_idx = token_id_indices[idx]
-                if token_id_idx >= len(non_ws_token_ids[idx]):
-                    # we are at the end of the input, select eos
-                    return eos_token_id, 0
+            def _select(scores: torch.Tensor, indices: List[int]) -> Tuple[torch.Tensor, torch.Tensor]:
+                token_ids = []
+                log_probs = []
+                for dist, idx in zip(scores, indices):
+                    token_id_idx = token_id_indices[idx]
+                    if token_id_idx >= len(non_ws_token_ids[idx]):
+                        # we are at the end of the input, select eos
+                        token_ids.append(eos_token_id)
+                        log_probs.append(0.0)
+                        continue
 
-                input_token_id = non_ws_token_ids[idx][token_id_idx]
-                ws_score = scores[ws_token_id]
-                input_token_score = scores[input_token_id]
-                if ws_score > input_token_score and not last_was_ws[idx]:
-                    last_was_ws[idx] = True
-                    return ws_token_id, float(ws_score)
-                else:
-                    token_id_indices[idx] += 1
-                    last_was_ws[idx] = False
-                    return input_token_id, float(input_token_score)
+                    input_token_id = non_ws_token_ids[idx][token_id_idx]
+                    ws_score = dist[ws_token_id]
+                    input_token_score = dist[input_token_id]
+                    if ws_score > input_token_score and not last_was_ws[idx]:
+                        last_was_ws[idx] = True
+                        token_ids.append(ws_token_id)
+                        log_probs.append(float(ws_score))
+                    else:
+                        token_id_indices[idx] += 1
+                        last_was_ws[idx] = False
+                        token_ids.append(input_token_id)
+                        log_probs.append(float(input_token_score))
+                return torch.tensor(token_ids, device=scores.device), torch.tensor(log_probs, device=scores.device)
 
             return _select
 
         output = search(
             decode_fn=_decode_fn,
-            initial_token_ids=[[self.output_tokenizer.bos_token_id()]] * encoded.shape[0],
+            initial_token_ids=[[bos_token_id]] * encoded.shape[0],
             pad_token_id=self.output_tokenizer.pad_token_id(),
             max_length=max_output_length,
             select_fn=_custom_select_fn(),
-            stop_fn=eos_stop_fn(self.output_tokenizer.eos_token_id()),
+            stop_fn=eos_stop_fn(eos_token_id),
             device=self.device,
-            kwargs_sub_select_fn=_kwargs_sub_select_fn,
+            kwargs_select_fn=_kwargs_select_fn,
             memory=encoded,
-            **kwargs
+            memory_padding_mask=kwargs["padding_mask"],
         )
         return output
 
@@ -276,13 +284,16 @@ class WhitespaceCorrector(corrector.TextCorrector):
                 prediction = torch.argmax(output[self._pfx + window_start:self._pfx + window_end], dim=-1)
                 merged_predictions.extend(prediction.tolist())
             repaired = whitespace.repair(items[0].data.text, merged_predictions)
-            return data.InferenceData(repaired, language=items[0].data.language)
+            return data.InferenceData(
+                repaired.strip(),
+                language=items[0].data.language
+            )
 
         # only thing left to do here is swap back the unknown tokens
         # with the original ones
         assert self.output_tokenizer is not None
-        unk_token_id = self.output_tokenizer.unk_token_id()
-        out_pfx = self.output_tokenizer.num_prefix_tokens()
+        unk_token = "<unk>"
+        unk_token_id = self.output_tokenizer.special_token_to_id(unk_token)
         out_sfx = self.output_tokenizer.num_suffix_tokens()
         merged = ""
         for item, output in zip(items, outputs):
@@ -298,7 +309,10 @@ class WhitespaceCorrector(corrector.TextCorrector):
                 if tok_id == unk_token_id
             ]
             input_unk_chars = [input_chars[i] for i in input_unk_indices]
-            output_token_ids = output[out_pfx:-out_sfx]
+            # we only need to exclude the suffix here because by default the search
+            # function returns only the newly decoded tokens, which means the prefix is
+            # already excluded
+            output_token_ids = output[:-out_sfx]
             output_unk_indices = [
                 i
                 for i, tok_id in enumerate(output_token_ids)
@@ -308,7 +322,9 @@ class WhitespaceCorrector(corrector.TextCorrector):
             output_str = ""
             start_idx = 0
             for output_unk_idx, input_unk_char in zip(output_unk_indices, input_unk_chars):
-                output_str += self.output_tokenizer.de_tokenize(output_token_ids[start_idx:output_unk_idx])
+                output_str += self.output_tokenizer.de_tokenize(
+                    output_token_ids[start_idx:output_unk_idx]
+                )
                 start_idx = output_unk_idx + 1
                 output_str += input_unk_char
             output_str += self.output_tokenizer.de_tokenize(output_token_ids[start_idx:])
@@ -320,14 +336,14 @@ class WhitespaceCorrector(corrector.TextCorrector):
         return data.InferenceData(merged.rstrip(), language=items[0].data.language)
 
     def correct_text(
-            self,
-            inputs: Union[str, List[str]],
-            languages: Optional[List[str]] = None,
-            batch_size: int = 16,
-            batch_max_tokens: Optional[int] = None,
-            sort: bool = True,
-            num_threads: Optional[int] = None,
-            show_progress: bool = False
+        self,
+        inputs: Union[str, List[str]],
+        languages: Optional[List[str]] = None,
+        batch_size: int = 16,
+        batch_max_tokens: Optional[int] = None,
+        sort: bool = True,
+        num_threads: Optional[int] = None,
+        show_progress: bool = False
     ) -> Union[str, List[str]]:
         input_is_string = isinstance(inputs, str)
         assert (
@@ -365,7 +381,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         progress_unit = "seq"
 
         if sort:
-            outputs = self._correct_sorted(
+            outputs = self._process_sorted(
                 loader,
                 progress_desc,
                 progress_total,
@@ -373,7 +389,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
                 show_progress
             )
         else:
-            outputs = self._correct_unsorted(
+            outputs = self._process_unsorted(
                 loader,
                 progress_desc,
                 progress_total,
@@ -406,7 +422,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         progress_unit = "byte"
 
         if sort:
-            output = self._correct_sorted(
+            output = self._process_sorted(
                 loader,
                 progress_desc,
                 progress_total,
@@ -414,7 +430,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
                 show_progress
             )
         else:
-            output = self._correct_unsorted(
+            output = self._process_unsorted(
                 loader,
                 progress_desc,
                 progress_total,
@@ -428,17 +444,17 @@ class WhitespaceCorrector(corrector.TextCorrector):
             yield from (data.text for data in output)
 
     def correct_file(
-            self,
-            input_file: str,
-            input_file_format: str = "text",
-            output_file: Optional[Union[TextIOWrapper, str]] = None,
-            output_file_format: str = "text",
-            language: Optional[str] = None,
-            batch_size: int = 16,
-            batch_max_tokens: Optional[int] = None,
-            sort: bool = True,
-            num_threads: Optional[int] = None,
-            show_progress: bool = False
+        self,
+        input_file: str,
+        input_file_format: str = "text",
+        output_file: Optional[Union[TextIOWrapper, str]] = None,
+        output_file_format: str = "text",
+        language: Optional[str] = None,
+        batch_size: int = 16,
+        batch_max_tokens: Optional[int] = None,
+        sort: bool = True,
+        num_threads: Optional[int] = None,
+        show_progress: bool = False
     ) -> Optional[Iterator[str]]:
         assert input_file_format in self.supported_input_formats(), f"unsupported input file format {input_file_format}, \
         must be one of {self.supported_input_formats()}"
@@ -459,7 +475,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
         progress_unit = "byte"
 
         if sort:
-            outputs = iter(self._correct_sorted(
+            outputs = iter(self._process_sorted(
                 loader,
                 progress_desc,
                 progress_total,
@@ -467,7 +483,7 @@ class WhitespaceCorrector(corrector.TextCorrector):
                 show_progress
             ))
         else:
-            outputs = self._correct_unsorted(
+            outputs = self._process_unsorted(
                 loader,
                 progress_desc,
                 progress_total,
@@ -491,19 +507,3 @@ class WhitespaceCorrector(corrector.TextCorrector):
 
         else:
             return (output.text for output in outputs)
-
-    def set_precision(self, precision: str) -> None:
-        if self.device.type == "cpu" and self._encoder_only and precision != "fp32":
-            self.logger.warning(
-                f"got {precision} precision, but "
-                "encoder-only models only support fp32 precision on CPU"
-            )
-            precision = "fp32"
-        else:
-            training_precision = self.cfg["train"].get("mixed_precision_dtype", "fp32")
-            if precision != "fp32" and precision != training_precision:
-                self.logger.warning(
-                    f"this model was trained with {training_precision} precision, "
-                    f"inference with {precision} might give unexpected results"
-                )
-        return super().set_precision(precision)

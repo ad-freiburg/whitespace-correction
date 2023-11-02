@@ -3,8 +3,8 @@ from typing import Dict, Any
 
 from torch import nn
 
-from text_correction_utils.api.trainer import Trainer
-from text_correction_utils import tokenization
+from text_utils.api.trainer import Trainer
+from text_utils import tokenization
 
 from whitespace_correction.model import model_from_config
 
