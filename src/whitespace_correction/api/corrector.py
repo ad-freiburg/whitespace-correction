@@ -507,3 +507,13 @@ class WhitespaceCorrector(TextProcessor):
 
         else:
             return (output.text for output in outputs)
+
+    def set_precision(self, precision: str) -> TextProcessor:
+        if self.pretrained and self.devices[0].type == "cpu" and precision != "fp32":
+            self.logger.info(
+                f"setting precision to fp32 instead of {precision}, "
+                f"because the pretrained {self.task} models do not "
+                f"support {precision} on CPU"
+            )
+            precision = "fp32"
+        return super().set_precision(precision)
