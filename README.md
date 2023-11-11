@@ -8,7 +8,7 @@ This project is mainly tested with Python 3.10, but should work fine with Python
 
 #### From PyPI
 
-Windows (x64) and  Linux are currently supported.
+Windows (x64) and  Linux are currently supported when installing from PyPI.
 
 ```bash
 pip install whitespace-correction
