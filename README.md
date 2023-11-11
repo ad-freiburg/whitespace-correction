@@ -4,9 +4,11 @@ Correct missing or spurious whitespaces in text.
 
 ### Installation
 
-This project is mainly tested with Python 3.10, but should work fine with Python 3.8 and newer versions
+This project is mainly tested with Python 3.10, but should work fine with Python 3.8 and newer versions.
 
 #### From PyPI
+
+Windows (x64) and  Linux are currently supported.
 
 ```bash
 pip install whitespace-correction
