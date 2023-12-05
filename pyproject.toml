@@ -20,7 +20,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "dtpu>=0.2.2",
+    "dtpu>=0.2.3",
     "transformers>=4.26.0"
 ]
 
