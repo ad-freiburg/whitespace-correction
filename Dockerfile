@@ -10,4 +10,4 @@ ENV WHITESPACE_CORRECTION_DOWNLOAD_DIR=/wsc/download
 ENV WHITESPACE_CORRECTION_CACHE_DIR=/wsc/cache
 ENV PYTHONWARNINGS="ignore"
 
-ENTRYPOINT ["/opt/conda/bin/wsc"]
+ENTRYPOINT ["/usr/local/bin/wsc"]
