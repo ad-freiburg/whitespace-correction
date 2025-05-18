@@ -1,6 +1,6 @@
 ## Whitespace correction using Transformers
 
-Correct missing or spurious whitespaces in text.
+Correct missing or spurious whitespaces in text. See the corresponding [Paper at ACL 2023](https://aclanthology.org/2023.acl-demo.37/).
 
 ### Installation
 
